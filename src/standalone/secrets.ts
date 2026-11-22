@@ -89,7 +89,7 @@ class WindowsDpapi implements SecretStorage {
           "$ptr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)",
           "try { [Console]::Out.Write([Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr)) }",
           "finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr) }"
-        ].join("; ");
+        ].join("\n");
     const result = await command("powershell.exe", [
       "-NoProfile", "-NonInteractive", "-Command", script
     ], input);
