@@ -14,7 +14,7 @@ import { assembleC, initializeHeader, loadPreset, type LoadedPreset } from "./sc
 import { builtinPreset } from "./generated-preset";
 import { StateStore, isAccepted } from "./state";
 import { credentialsBackend } from "./secrets";
-import { ask, confirm, interactive, select } from "./terminal";
+import { ask, confirm, interactive, select, password } from "./terminal";
 
 export interface ResolvedProblem {
   root: string;
@@ -89,6 +89,7 @@ export class StandaloneWorkflow {
   readonly credentialBackend = credentialsBackend();
   readonly session = new AccountSession(this.credentialBackend.store);
   private restored = false;
+  private tested = new Map<string, { code: string; stamp: string }>();
 
   async account(required = true): Promise<string | undefined> {
     if (!this.restored) {
@@ -112,7 +113,6 @@ export class StandaloneWorkflow {
     if (!interactive()) throw new Error("登录需要交互式终端，以免在命令行参数中泄露密码。");
     const username = await ask("Accoding 账号");
     if (!username) throw new Error("账号不能为空。");
-    const { password } = await import("./password-helper").then(m => m);
     const pass = await password("Accoding 密码");
     if (!pass) throw new Error("密码不能为空。");
     const remember = this.credentialBackend.persistent
@@ -327,6 +327,7 @@ export class StandaloneWorkflow {
       return false;
     }
     const storage = path.join(resolved.root, ".accoding", "runs");
+    this.tested.delete(resolved.source);
     const result = await judge(prepared.source, storage, cases, toolchain());
     try {
       if (result.compilation.exitCode !== 0 || result.compilation.reason) {
@@ -348,10 +349,17 @@ export class StandaloneWorkflow {
         result.cases.length === cases.filter((c) => c.enabled).length &&
         result.cases.every((c) => c.status === "PASS");
       console.log(allPass ? "全部本地样例通过。" : "有用例未通过。");
+      if (allPass) this.tested.set(resolved.source, {
+        code: prepared.code, stamp: hash(await fs.readFile(resolved.source, "utf8"))
+      });
       return allPass;
     } finally {
       await fs.rm(result.directory, { recursive: true, force: true });
     }
+  }
+
+  testedCode(source: string): string | undefined {
+    return this.tested.get(source)?.code;
   }
 
   private async chooseLanguage(problem: Problem, source: string, requested?: string): Promise<string> {
@@ -377,9 +385,23 @@ export class StandaloneWorkflow {
   ): Promise<void> {
     const account = await this.account();
     if (!account) throw new Error("未登录");
-    const prepared = codeSnapshot === undefined
-      ? await this.prepare(resolved)
-      : { source: resolved.source, code: codeSnapshot };
+    let prepared: { source: string; code: string };
+    if (codeSnapshot === undefined) {
+      prepared = await this.prepare(resolved);
+    } else {
+      const tested = this.tested.get(resolved.source);
+      if (!tested || tested.code !== codeSnapshot)
+        throw new Error("找不到对应的通过测试的源码快照，请重新测试。");
+      const current = hash(await fs.readFile(resolved.source, "utf8"));
+      if (current !== tested.stamp)
+        throw new Error("测试后源码发生修改，请重新测试。");
+      const ext = path.extname(resolved.source).toLowerCase();
+      const submissionPath = path.join(path.dirname(resolved.source),
+        ".accoding", "tested-submit" + ext);
+      await fs.mkdir(path.dirname(submissionPath), { recursive: true });
+      await fs.writeFile(submissionPath, codeSnapshot, "utf8");
+      prepared = { source: submissionPath, code: codeSnapshot };
+    }
     const storage = path.join(resolved.root, ".accoding", "runs");
     const checked = await compile(prepared.source, storage, toolchain());
     try {
