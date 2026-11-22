@@ -38,12 +38,13 @@ function usage() {
   ].join("\n"));
 }
 
-async function runTest(app: StandaloneWorkflow, resolved: ResolvedProblem): Promise<void> {
-  const result = await app.test(resolved);
-  if (result && await confirm("所有本地样例通过。是否提交到 Accoding？")) {
-    // The workflow reuses the tested immutable source snapshot.
-    await app.submit(resolved);
+async function runTest(app: StandaloneWorkflow, resolved: ResolvedProblem): Promise<boolean> {
+  const passed = await app.test(resolved);
+  if (passed && await confirm("所有本地样例通过。是否提交到 Accoding？")) {
+    // Submit the immutable bytes that passed local testing.
+    await app.submit(resolved, undefined, app.testedCode(resolved.source));
   }
+  return passed;
 }
 
 async function openFolder(source: string): Promise<void> {
@@ -106,9 +107,18 @@ async function tui(app: StandaloneWorkflow): Promise<void> {
     usage();
     throw new Error("交互界面需要可输入的终端；自动化脚本请使用 CLI 子命令。");
   }
+  let loggedIn: string | undefined;
   try {
-    await app.account(false);
+    loggedIn = await app.account(false);
   } catch { /* Offline testing still works if a workspace is already available. */ }
+  if (!loggedIn) {
+    const first = await select("欢迎使用 Accoding。首次使用建议先登录。", [
+      { label: "登录 Accoding", value: "login" },
+      { label: "暂时跳过，使用已有本地工作区", value: "offline" }
+    ]);
+    if (first === "login") await app.login();
+    if (first === undefined) return;
+  }
 
   let current: ResolvedProblem | undefined;
   for (;;) {
@@ -218,7 +228,8 @@ async function run(): Promise<void> {
       return;
     }
     if (command === "test" && args[1]) {
-      await runTest(app, await app.resolve(args[1]));
+      const passed = await runTest(app, await app.resolve(args[1]));
+      if (!passed) process.exitCode = 1;
       return;
     }
     if (command === "submit" && args[1]) {
