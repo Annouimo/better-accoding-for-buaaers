@@ -53,8 +53,9 @@
     "format:check": "prettier --check src webview tests scripts",
     "test:package": "node scripts/test-package.mjs",
     "test:debug": "node scripts/test-debug.mjs",
-    "test:standalone": "node --experimental-strip-types --test tests/standalone/scaffold.test.mjs",
-    "build:standalone": "bun build ./src/standalone/cli.ts --compile --outfile dist/accoding"
+    "test:standalone": "bun test tests/standalone/*.test.mjs",
+    "build:standalone": "node scripts/embed-standalone-preset.mjs && bun build ./src/standalone/app.ts --compile --outfile dist/accoding",
+    "start:standalone": "bun src/standalone/app.ts"
   },
   "contributes": {
     "commands": [
