@@ -1,0 +1,48 @@
+name: Standalone CLI checks
+
+on:
+  push:
+    branches:
+      - "feat/standalone-cli-foundation"
+  pull_request:
+    paths:
+      - "src/standalone/**"
+      - "scaffold/**"
+      - "scripts/embed-standalone-preset.mjs"
+      - ".github/workflows/standalone.yml"
+      - "package.json"
+  workflow_dispatch:
+
+jobs:
+  standalone:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci
+      - name: TypeScript
+        run: npm run typecheck
+      - name: Embedded preset generation
+        run: node scripts/embed-standalone-preset.mjs
+      - name: Scaffold unit tests
+        run: bun test tests/standalone/scaffold.test.mjs
+      - name: Standalone help
+        run: bun src/standalone/app.ts --help
+      - name: Minimal C99 scaffold smoke
+        run: |
+          bun src/standalone/cli.ts scaffold init /tmp/accoding-demo
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("/tmp/accoding-demo/main.c")
+          p.write_text('#include <stdio.h>\n#include "exam.h"\nint main(void) { printf("%llu\\n", exam_lcm_u64(12, 18)); return 0; }\n')
+          PY
+          bun src/standalone/cli.ts scaffold prepare /tmp/accoding-demo/main.c
+          gcc -std=c99 /tmp/accoding-demo/.accoding/submit.c -o /tmp/accoding-hello
+          test "$(/tmp/accoding-hello)" = "36"
+      - name: Build self-contained binary
+        run: |
+          bun build ./src/standalone/app.ts --compile --outfile /tmp/accoding
+          /tmp/accoding --help
