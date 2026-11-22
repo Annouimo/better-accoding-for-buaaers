@@ -1,4 +1,5 @@
-import readline from "node:readline/promises";
+import { createInterface } from "node:readline/promises";
+import { emitKeypressEvents } from "node:readline";
 import { stdin, stdout } from "node:process";
 
 export function interactive(): boolean {
@@ -10,7 +11,7 @@ export async function ask(question: string, defaultValue?: string): Promise<stri
     if (defaultValue !== undefined) return defaultValue;
     throw new Error("This command requires a terminal. Provide its arguments explicitly.");
   }
-  const rl = readline.createInterface({ input: stdin, output: stdout });
+  const rl = createInterface({ input: stdin, output: stdout });
   try {
     const value = (await rl.question(
       question + (defaultValue ? " [" + defaultValue + "]" : "") + ": "
@@ -27,7 +28,7 @@ export async function password(question = "密码"): Promise<string> {
     throw new Error("Password entry requires an interactive terminal.");
   stdout.write(question + ": ");
   const wasRaw = stdin.isRaw;
-  readline.emitKeypressEvents(stdin);
+  emitKeypressEvents(stdin);
   stdin.setRawMode(true);
   stdin.resume();
   return await new Promise<string>((resolve, reject) => {
