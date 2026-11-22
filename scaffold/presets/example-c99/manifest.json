@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "id": "example-c99",
+  "language": "c",
+  "standard": "c99",
+  "headerFile": "exam.h",
+  "systemHeaders": [],
+  "components": [
+    {
+      "id": "gcd_u64",
+      "description": "Greatest common divisor of two unsigned integers",
+      "symbols": [
+        "exam_gcd_u64"
+      ],
+      "source": "components/gcd_u64.h",
+      "requires": []
+    },
+    {
+      "id": "lcm_u64",
+      "description": "Least common multiple (unsigned overflow is possible)",
+      "symbols": [
+        "exam_lcm_u64"
+      ],
+      "source": "components/lcm_u64.h",
+      "requires": [
+        "gcd_u64"
+      ]
+    }
+  ]
+}
