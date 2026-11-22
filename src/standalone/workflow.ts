@@ -5,7 +5,7 @@ import { login, currentUser, ContestAdapter, ProblemsetAdapter } from "../accodi
 import { fetchContestSnapshotForImport } from "../accoding/import";
 import { syncContest } from "../workspace/contest";
 import { WorkspaceStore } from "../workspace/store";
-import { defaultSourceFiles, cTemplate } from "../workspace/sources";
+import { defaultSourceFiles, cTemplate, cppTemplate } from "../workspace/sources";
 import { compile, judge, type Toolchain } from "../judge/judge";
 import { sendSubmission } from "../submissions/send";
 import { SubmissionStore, isPending } from "../submissions/store";
@@ -158,6 +158,12 @@ export class StandaloneWorkflow {
     if (existing === cTemplate)
       await fs.writeFile(source, '#include "' + preset.manifest.headerFile + '"\n' + existing,
         "utf8");
+    // Do not bring the original VS Code extension\'s large competitive template
+    // into the minimal standalone C++ workflow.
+    const cpp = localPath(root, target.cpp);
+    if (await fs.readFile(cpp, "utf8") === cppTemplate)
+      await fs.writeFile(cpp,
+        "#include <iostream>\n\nint main() {\n    return 0;\n}\n", "utf8");
   }
 
   async importContest(value: string, rootArg?: string, presetPath?: string): Promise<void> {
