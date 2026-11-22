@@ -52,7 +52,9 @@
     "package": "node scripts/package.mjs",
     "format:check": "prettier --check src webview tests scripts",
     "test:package": "node scripts/test-package.mjs",
-    "test:debug": "node scripts/test-debug.mjs"
+    "test:debug": "node scripts/test-debug.mjs",
+    "test:standalone": "node --experimental-strip-types --test tests/standalone/scaffold.test.mjs",
+    "build:standalone": "bun build ./src/standalone/cli.ts --compile --outfile dist/accoding"
   },
   "contributes": {
     "commands": [
