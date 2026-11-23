@@ -29,6 +29,8 @@ function usage() {
     "  accoding status [--watch]        查询等待中的 OJ 评测"
     "  accoding sync                    手动同步题目与比赛",
     "  accoding config preset PATH      设置默认脚手架配置",
+    "  accoding config compiler c PATH  设置 C 编译器路径",
+    "  accoding config compiler cpp PATH 设置 C++ 编译器路径",
     "",
     "  --root DIR                       指定工作区（初始化/同步/查询）",
     "  --preset MANIFEST                初始化时使用自定义 C99 配置",
@@ -185,6 +187,7 @@ async function tui(app: StandaloneWorkflow): Promise<void> {
         { label: "手动同步比赛与题目", value: "sync" },
         { label: "切换工作区目录", value: "workspace" },
         { label: "设置脚手架配置", value: "preset" },
+        { label: "设置 C / C++ 编译器", value: "compiler" },
         { label: "查看待查询的 OJ 提交", value: "status" },
         { label: "切换 C / C++", value: "language" },
         { label: "打开当前题目的文件夹", value: "folder" },
@@ -205,6 +208,18 @@ async function tui(app: StandaloneWorkflow): Promise<void> {
         const currentRoot = (await app.state.load()).lastWorkspace || process.cwd();
         const directory = await ask("工作区目录", currentRoot);
         if (directory) { await app.workspaceRoot(directory); current = undefined; }
+      } else if (extra === "compiler") {
+        const state = await app.state.load();
+        const selected = await select("选择要设置的编译器", [
+          { label: "C（当前：" + (state.compilerC || "自动检测") + "）", value: "c" },
+          { label: "C++（当前：" + (state.compilerCpp || "自动检测") + "）", value: "cpp" }
+        ]);
+        if (selected) {
+          const previous = selected === "c" ? state.compilerC : state.compilerCpp;
+          const compiler = await ask("编译器可执行文件路径（输入 auto 恢复自动检测）",
+            previous || "auto");
+          await app.setCompiler(selected as "c" | "cpp", compiler === "auto" ? "" : compiler);
+        }
       } else if (extra === "preset") {
         const state = await app.state.load();
         console.log("当前配置：" + (state.presetPath || "内置示例"));
@@ -256,6 +271,11 @@ async function run(): Promise<void> {
     if (command === "sync") { await app.sync(root); return; }
     if (command === "config" && args[1] === "preset" && args[2]) {
       await app.setPreset(args[2] === "default" ? undefined : args[2]);
+      return;
+    }
+    if (command === "config" && args[1] === "compiler" &&
+        (args[2] === "c" || args[2] === "cpp") && args[3]) {
+      await app.setCompiler(args[2], args[3] === "auto" ? "" : args[3]);
       return;
     }
     if (command === "status") { await app.status(root, args.includes("--watch")); return; }
