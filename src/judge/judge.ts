@@ -70,6 +70,7 @@ export async function compile(
   toolchain: Toolchain,
   signal?: AbortSignal,
   debug = false,
+  workingDirectory?: string,
 ) {
   const ext = path.extname(source).toLowerCase();
   if (![".c", ".cpp", ".cc", ".cxx"].includes(ext))
@@ -91,8 +92,9 @@ export async function compile(
   );
   await fs.writeFile(snapshot, mapped);
   const flags = isC ? toolchain.cArgs : toolchain.cppArgs;
+  const cwd = workingDirectory ?? path.dirname(source);
   const artifactArgument = (file: string) => {
-    const relative = path.relative(path.dirname(source), file);
+    const relative = path.relative(cwd, file);
     return path.isAbsolute(relative) ? relative : `.${path.sep}${relative}`;
   };
   const args = [
@@ -108,13 +110,13 @@ export async function compile(
   const configuredCompiler = isC ? toolchain.c : toolchain.cpp;
   const compiler =
     configuredCompiler.includes("/") || configuredCompiler.includes("\\")
-      ? path.resolve(path.dirname(source), configuredCompiler)
+      ? path.resolve(cwd, configuredCompiler)
       : configuredCompiler;
   // MinGW linkers may decode absolute Unicode paths through the system code page.
   // Relative artifact paths avoid repeating Unicode ancestors while retaining
   // the source directory as cwd for user-supplied include/library arguments.
   const result = await runProcess(compiler, args, {
-    cwd: path.dirname(source),
+    cwd,
     timeoutMs: 30000,
     outputLimit: toolchain.outputLimit,
     signal,
@@ -127,9 +129,10 @@ export async function judge(
   cases: TestCase[],
   toolchain: Toolchain,
   signal?: AbortSignal,
+  workingDirectory?: string,
 ): Promise<JudgeResult> {
   const snapshot = structuredClone(cases.filter((c) => c.enabled));
-  const built = await compile(source, storage, toolchain, signal);
+  const built = await compile(source, storage, toolchain, signal, false, workingDirectory);
   const output: JudgeResult = {
     runId: path.basename(built.directory),
     sourceHash: built.sourceHash,
@@ -141,7 +144,7 @@ export async function judge(
   if (built.result.exitCode !== 0 || built.result.reason) return output;
   for (const c of snapshot) {
     const result = await runProcess(built.program, [], {
-      cwd: path.dirname(source),
+      cwd: workingDirectory ?? path.dirname(source),
       input: c.input,
       timeoutMs: toolchain.timeoutMs,
       outputLimit: toolchain.outputLimit,
