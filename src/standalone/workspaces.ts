@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { Problem } from "../model";
-import { ask, interactive } from "./terminal";
+import { ask, confirm, interactive } from "./terminal";
 
 export function droppedPath(raw: string, cwd = process.cwd(), home = os.homedir()): string {
   let text = raw.trim();
@@ -41,7 +41,17 @@ export async function selectWorkspaceDirectory(title: string, explicit?: string)
   console.log("\n保存目录：可以把 Finder 或文件资源管理器中的文件夹拖进终端，再按回车。");
   console.log("每场比赛只需选择一次，已存在的源文件不会被覆盖。");
   const entered = await ask("保存到", suggested);
-  return droppedPath(entered);
+  const selected = droppedPath(entered);
+  try {
+    const stat = await fs.stat(selected);
+    if (!stat.isDirectory()) throw new Error("选择的路径不是文件夹：" + selected);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    if (selected !== suggested &&
+        !(await confirm("文件夹不存在，是否创建：" + selected + "？", true)))
+      throw new Error("已取消创建工作区。");
+  }
+  return selected;
 }
 
 async function exists(file: string): Promise<boolean> {
