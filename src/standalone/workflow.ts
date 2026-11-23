@@ -9,6 +9,7 @@ import { defaultSourceFiles, cTemplate, cppTemplate } from "../workspace/sources
 import { compile, judge, type Toolchain } from "../judge/judge";
 import { sendSubmission } from "../submissions/send";
 import { SubmissionStore, isPending } from "../submissions/store";
+import { monitorSubmissions } from "../submissions/monitor";
 import { bindingId, hash, parseImport, type Binding, type Problem, type Target } from "../model";
 import { assembleC, initializeHeader, loadPreset, type LoadedPreset } from "./scaffold";
 import { builtinPreset } from "./generated-preset";
@@ -439,18 +440,21 @@ export class StandaloneWorkflow {
         return;
       }
       await store.observe(account, sent, attemptId);
-      await this.state.rememberProblem(resolved.root, resolved.binding.bindingId, account,
+      const submissionBinding = bindingId(sent.target);
+      if (submissionBinding !== resolved.binding.bindingId)
+        console.log("注意：本次转为题库提交，不计入原比赛成绩。");
+      await this.state.rememberProblem(resolved.root, submissionBinding, account,
         { verdict: sent.result, sourceFile: resolved.source });
       console.log("提交 ID：" + sent.id + "，OJ 状态：" + sent.result);
-      if (isPending(sent)) await this.status(resolved.root, false);
+      if (isPending(sent)) await this.status(resolved.root, true);
     } catch (error) {
       if (attemptId) await store.uncertain(account, attemptId);
       throw error;
     }
   }
 
-  async status(rootArg?: string, requireLogin = true): Promise<void> {
-    const account = await this.account(requireLogin);
+  async status(rootArg?: string, watch = false): Promise<void> {
+    const account = await this.account();
     if (!account) throw new Error("未登录");
     const root = await this.workspaceRoot(rootArg);
     const store = new SubmissionStore(path.join(root, ".accoding", "submissions"));
@@ -465,17 +469,41 @@ export class StandaloneWorkflow {
       console.log("没有待查询的远程评测。");
       return;
     }
-    for (const attempt of pending) {
-      const previous = attempt.submission!;
+    const get = async (previous: NonNullable<typeof pending[number]["submission"]>) => {
       const target = previous.target;
-      const updated = target.kind === "contest"
-        ? await new ContestAdapter(this.session.client).get(target, previous.id)
-        : await new ProblemsetAdapter(target.service === "admin"
+      return target.kind === "contest"
+        ? new ContestAdapter(this.session.client).get(target, previous.id)
+        : new ProblemsetAdapter(target.service === "admin"
           ? this.session.client.adminReader() : this.session.client).get(target, previous.id);
-      await store.observe(account, updated, attempt.attemptId);
-      await this.state.rememberProblem(root, bindingId(target), account,
-        { verdict: updated.result });
-      console.log("题 " + target.problemId + " / " + updated.id + "：" + updated.result);
+    };
+    const update = async (submission: NonNullable<typeof pending[number]["submission"]>) => {
+      const attempt = pending.find((entry) =>
+        entry.submission?.id === submission.id &&
+        bindingId(entry.submission.target) === bindingId(submission.target));
+      await store.observe(account, submission, attempt?.attemptId);
+      await this.state.rememberProblem(root, bindingId(submission.target), account,
+        { verdict: submission.result });
+      console.log("题 " + submission.target.problemId + " / " +
+        submission.id + "：" + submission.result);
+    };
+    if (!watch) {
+      for (const attempt of pending)
+        await update(await get(attempt.submission!));
+      return;
+    }
+    const controller = new AbortController();
+    const interrupt = () => controller.abort();
+    process.on("SIGINT", interrupt);
+    try {
+      const result = await monitorSubmissions({
+        submissions: pending.map((entry) => entry.submission!),
+        signal: controller.signal,
+        get, update, intervalMs: 2000, budgetMs: 180000
+      });
+      if (result === "waiting") console.log("评测尚未完成，稍后运行 accoding status 继续查询。");
+      if (result === "stopped") console.log("已停止等待，远程提交不会撤回。");
+    } finally {
+      process.off("SIGINT", interrupt);
     }
   }
 
