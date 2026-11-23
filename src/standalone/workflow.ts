@@ -496,8 +496,7 @@ export class StandaloneWorkflow {
       const submissionBinding = bindingId(sent.target);
       if (submissionBinding !== resolved.binding.bindingId)
         console.log("注意：本次转为题库提交，不计入原比赛成绩。");
-      await this.state.rememberProblem(resolved.root, submissionBinding, account,
-        { verdict: sent.result, sourceFile: resolved.source });
+      await this.state.recordVerdict(resolved.root, submissionBinding, account, sent.result);
       console.log("提交 ID：" + sent.id + "，OJ 状态：" + sent.result);
       if (isPending(sent)) await this.status(resolved.root, true);
     } catch (error) {
@@ -534,8 +533,8 @@ export class StandaloneWorkflow {
         entry.submission?.id === submission.id &&
         bindingId(entry.submission.target) === bindingId(submission.target));
       await store.observe(account, submission, attempt?.attemptId);
-      await this.state.rememberProblem(root, bindingId(submission.target), account,
-        { verdict: submission.result });
+      await this.state.recordVerdict(root, bindingId(submission.target), account,
+        submission.result);
       console.log("题 " + submission.target.problemId + " / " +
         submission.id + "：" + submission.result);
     };
@@ -589,8 +588,8 @@ export class StandaloneWorkflow {
     }));
     entries.sort((a, b) =>
       Number(a.accepted) - Number(b.accepted) ||
-      Number(b.last) - Number(a.last) ||
       b.modified - a.modified ||
+      Number(b.last) - Number(a.last) ||
       a.binding.problem.label.localeCompare(b.binding.problem.label));
     return entries.map(({ root, workspace, binding, source }) =>
       ({ root, workspace, binding, source }));
