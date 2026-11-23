@@ -148,16 +148,19 @@ export class StandaloneWorkflow {
     const target = defaultSourceFiles(binding.problem.target);
     const source = localPath(root, target.c);
     const directory = path.dirname(source);
-    await savePresetSnapshot(directory, preset);
+    const existingPreset = path.join(directory, ".accoding", "scaffold", "manifest.json");
+    const chosen = (await fileExists(existingPreset))
+      ? await loadPreset(existingPreset) : preset;
+    await savePresetSnapshot(directory, chosen);
     try {
-      await initializeHeader(directory, preset);
+      await initializeHeader(directory, chosen);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
     }
     // Only touch a newly imported, untouched default program.
     const existing = await fs.readFile(source, "utf8");
     if (existing === cTemplate)
-      await fs.writeFile(source, '#include "' + preset.manifest.headerFile + '"\n' + existing,
+      await fs.writeFile(source, '#include "' + chosen.manifest.headerFile + '"\n' + existing,
         "utf8");
     // Do not bring the original VS Code extension\'s large competitive template
     // into the minimal standalone C++ workflow.
@@ -317,18 +320,26 @@ export class StandaloneWorkflow {
   async prepare(resolved: ResolvedProblem): Promise<{ source: string; code: string }> {
     const original = await fs.readFile(resolved.source, "utf8");
     const ext = path.extname(resolved.source).toLowerCase();
-    if (ext !== ".c") return { source: resolved.source, code: original };
+    if (ext !== ".c") {
+      if (/^\s*#\s*include\s*"/m.test(original))
+        throw new Error("C++ 第一版不支持自动展开自定义头文件，请先合并为单文件。");
+      return { source: resolved.source, code: original };
+    }
     const presetFile = path.join(path.dirname(resolved.source),
       ".accoding", "scaffold", "manifest.json");
     if (!(await fileExists(presetFile))) {
-      if (/#\s*include\s*"exam\.h"/.test(original))
-        throw new Error("源文件需要 exam.h，但未找到对应脚手架配置快照。");
+      if (/^\s*#\s*include\s*"/m.test(original))
+        throw new Error("使用了本地头文件，但未找到可展开的脚手架配置快照。");
       return { source: resolved.source, code: original };
     }
     const preset = await loadPreset(presetFile);
     const hasInclude = original.split(/\r?\n/).some((line) =>
       new RegExp('^\\s*#\\s*include\\s*"' + preset.manifest.headerFile.replace(/\./g, "\\.") + '"').test(line));
-    if (!hasInclude) return { source: resolved.source, code: original };
+    if (!hasInclude) {
+      if (/^\s*#\s*include\s*"/m.test(original))
+        throw new Error("检测到其他本地头文件；C99 单文件模式只支持配置中的头文件。");
+      return { source: resolved.source, code: original };
+    }
     const assembled = assembleC(original, preset);
     const location = path.join(path.dirname(resolved.source), ".accoding", "submit.c");
     await fs.mkdir(path.dirname(location), { recursive: true });
