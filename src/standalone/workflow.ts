@@ -25,11 +25,11 @@ export interface ResolvedProblem {
   source: string;
 }
 
-export function toolchain(): Toolchain {
+export function toolchain(config: { c?: string; cpp?: string } = {}): Toolchain {
   return {
-    c: process.env.ACCODING_CC || process.env.CC ||
+    c: process.env.ACCODING_CC || process.env.CC || config.c ||
       (process.platform === "win32" ? "gcc" : "cc"),
-    cpp: process.env.ACCODING_CXX || process.env.CXX ||
+    cpp: process.env.ACCODING_CXX || process.env.CXX || config.cpp ||
       (process.platform === "win32" ? "g++" : "c++"),
     cArgs: ["-std=c99", "-O2", "-Wall", "-Wextra", "-Wno-unused-function"],
     cppArgs: ["-std=c++17", "-O2", "-Wall", "-Wextra"],
@@ -170,6 +170,17 @@ export class StandaloneWorkflow {
     if (await fs.readFile(cpp, "utf8") === cppTemplate)
       await fs.writeFile(cpp,
         "#include <iostream>\n\nint main() {\n    return 0;\n}\n", "utf8");
+  }
+
+  async configuredToolchain(): Promise<Toolchain> {
+    const state = await this.state.load();
+    return toolchain({ c: state.compilerC, cpp: state.compilerCpp });
+  }
+
+  async setCompiler(language: "c" | "cpp", executable: string): Promise<void> {
+    await this.state.rememberCompiler(language, executable.trim());
+    console.log((language === "c" ? "C" : "C++") +
+      " 编译器：" + (executable.trim() || "自动检测"));
   }
 
   async activePreset(explicit?: string): Promise<LoadedPreset> {
@@ -361,7 +372,7 @@ export class StandaloneWorkflow {
     }
     const storage = path.join(resolved.root, ".accoding", "runs");
     this.tested.delete(resolved.source);
-    const result = await judge(prepared.source, storage, cases, toolchain());
+    const result = await judge(prepared.source, storage, cases, await this.configuredToolchain());
     try {
       if (result.compilation.exitCode !== 0 || result.compilation.reason) {
         console.error("编译失败：\n" + result.compilation.stderr);
@@ -436,7 +447,7 @@ export class StandaloneWorkflow {
       prepared = { source: submissionPath, code: codeSnapshot };
     }
     const storage = path.join(resolved.root, ".accoding", "runs");
-    const checked = await compile(prepared.source, storage, toolchain());
+    const checked = await compile(prepared.source, storage, await this.configuredToolchain());
     try {
       if (checked.result.exitCode !== 0 || checked.result.reason)
         throw new Error("提交前编译失败，未上传：\n" + checked.result.stderr);
