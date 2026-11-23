@@ -12,6 +12,7 @@ export interface ApplicationState {
   lastWorkspace?: string;
   lastProblem?: string;
   lastAccount?: string;
+  presetPath?: string;
   problems: Record<string, ProblemActivity>;
 }
 
@@ -58,6 +59,13 @@ export class StateStore {
     } finally {
       await fs.rm(temp, { force: true });
     }
+  }
+
+  async rememberPreset(file?: string): Promise<void> {
+    const state = await this.load();
+    if (file) state.presetPath = path.resolve(file);
+    else delete state.presetPath;
+    await this.save(state);
   }
 
   async rememberWorkspace(root: string): Promise<void> {
