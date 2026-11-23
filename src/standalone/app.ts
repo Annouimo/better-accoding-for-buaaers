@@ -119,7 +119,13 @@ async function tui(app: StandaloneWorkflow): Promise<void> {
       { label: "登录 Accoding", value: "login" },
       { label: "暂时跳过，使用已有本地工作区", value: "offline" }
     ]);
-    if (first === "login") await app.login();
+    if (first === "login") {
+      try { await app.login(); }
+      catch (error) {
+        console.error("登录失败：" + (error instanceof Error ? error.message : String(error)));
+        return;
+      }
+    }
     if (first === undefined) return;
   }
 
@@ -155,6 +161,7 @@ async function tui(app: StandaloneWorkflow): Promise<void> {
         ];
     const action = await select(title, choices);
     if (action === undefined) return;
+    try {
     if (action === "test" && current) await runTest(app, current);
     if (action === "choose") {
       const picked = await chooseProblem(app, false);
@@ -238,6 +245,9 @@ async function tui(app: StandaloneWorkflow): Promise<void> {
       else if (extra === "folder" && current) await openFolder(current.source);
       else if (extra === "login") await app.login();
       else if (extra === "logout") await app.logout();
+    }
+    } catch (error) {
+      console.error("操作失败：" + (error instanceof Error ? error.message : String(error)));
     }
   }
 }
