@@ -71,6 +71,25 @@ test("legacy numeric layout never gets silently migrated", async () => {
   }
 });
 
+test("admin-backed problem IDs remain indexable", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "accoding-admin-"));
+  try {
+    const store = new WorkspaceStore(root);
+    const admin: Problem = {
+      target: { kind: "problemset", service: "admin", problemId: "12345" },
+      title: "Administrator-backed exercise",
+      label: "#12345",
+      statement: { format: "html", content: "", baseUrl: "https://accoding.buaa.edu.cn:4000" },
+      languages: ["c"], samples: [], warnings: [], special: false
+    };
+    const entry = await store.import(admin);
+    assert.equal(entry.bindingId, "admin-problem-12345");
+    assert.equal((await store.list())[0].bindingId, entry.bindingId);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
 test("remote verdict refresh does not change last-active problem", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "accoding-state-focus-"));
   try {
