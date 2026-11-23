@@ -7,6 +7,7 @@ export interface ProblemActivity {
   verdict?: string;
   accepted?: boolean;
   lastActiveAt?: string;
+  lastVerdictAt?: string;
   sourceFile?: string;
 }
 export interface ApplicationState {
@@ -102,6 +103,23 @@ export class StateStore {
     state.lastWorkspace = path.resolve(root);
     state.lastProblem = key;
     state.lastAccount = account;
+    await this.save(state);
+  }
+
+  /** Remote status changes must never steal focus from the user's active problem. */
+  async recordVerdict(
+    root: string, bindingId: string, account: string, verdict: string
+  ): Promise<void> {
+    const state = await this.load();
+    const key = activityKey(root, bindingId, account);
+    const previous = state.problems[key] || {};
+    state.problems[key] = {
+      ...previous,
+      verdict,
+      accepted: Boolean(previous.accepted || isAccepted(previous.verdict) ||
+        isAccepted(verdict)),
+      lastVerdictAt: new Date().toISOString()
+    };
     await this.save(state);
   }
 
