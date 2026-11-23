@@ -216,14 +216,21 @@ export class StandaloneWorkflow {
     const imported = await syncContest(workspace, snapshot, undefined, undefined,
       friendly ? (problem) => readableProblemDirectory(root, problem) : undefined);
     for (const binding of imported) await this.ensureScaffold(root, binding, preset);
-    if (imported.length) {
-      const recent = imported.find((b) => !b.unavailable);
-      if (recent) await this.state.rememberProblem(root, recent.bindingId, account);
+    // Sync verdicts before choosing a default, so known AC tasks are not selected.
+    await this.refreshContestVerdicts(root, snapshot.id, account, snapshot.problems);
+    const state = await this.state.load();
+    const alreadyActive = imported.some((b) =>
+      this.state.isLastProblem(state, root, b.bindingId, account));
+    // Re-importing a contest must not reset the active task to problem A.
+    if (!alreadyActive) {
+      const next = imported.find((b) =>
+        !b.unavailable && !activityAccepted(
+          this.state.getActivity(state, root, b.bindingId, account)));
+      if (next) await this.state.rememberProblem(root, next.bindingId, account);
     }
     console.log("比赛：" + snapshot.title + "（" + snapshot.id + "）");
     console.log("当前可访问：" + snapshot.problems.length + " 题；本地已处理：" +
       imported.length + " 题。");
-    await this.refreshContestVerdicts(root, snapshot.id, account, snapshot.problems);
   }
 
   private async refreshContestVerdicts(
