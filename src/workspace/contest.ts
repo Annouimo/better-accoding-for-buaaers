@@ -13,6 +13,7 @@ export async function syncContest(
   snapshot: ContestSnapshot,
   prepare: (problem: Problem) => Promise<Problem> = async (p) => p,
   onlyBindingId?: string,
+  directoryFor?: (problem: Problem) => Promise<string | undefined>,
 ): Promise<Binding[]> {
   snapshot = validateContestSnapshot(snapshot);
   const previous = await workspace.contestRoster(snapshot.id);
@@ -44,7 +45,10 @@ export async function syncContest(
   if (!onlyBindingId) {
     for (const p of snapshot.problems) {
       if (!local.has(bindingId(p.target)) && !known.has(p.target.problemId))
-        updated.push(await workspace.import(await prepare(p)));
+        {
+          const prepared = await prepare(p);
+          updated.push(await workspace.import(prepared, await directoryFor?.(prepared)));
+        }
     }
     // Commit the roster last. A partial run can be retried without losing new IDs.
     await workspace.recordContest(snapshot);
