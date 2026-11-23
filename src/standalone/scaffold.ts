@@ -40,7 +40,9 @@ function stringArray(value: unknown, label: string): string[] {
 }
 
 export async function loadPreset(manifestPath: string): Promise<LoadedPreset> {
-  const absolute = await fs.realpath(manifestPath);
+  const requested = await fs.realpath(manifestPath);
+  const absolute = (await fs.stat(requested)).isDirectory()
+    ? path.join(requested, "manifest.json") : requested;
   const base = path.dirname(absolute);
   const raw: unknown = JSON.parse(await fs.readFile(absolute, "utf8"));
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) fail("invalid JSON object");
