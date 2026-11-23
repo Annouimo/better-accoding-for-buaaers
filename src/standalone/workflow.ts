@@ -192,12 +192,13 @@ export class StandaloneWorkflow {
   }
 
   async setPreset(file?: string): Promise<void> {
-    if (file) {
-      const preset = await loadPreset(file);
+    const selected = file ? droppedPath(file) : undefined;
+    if (selected) {
+      const preset = await loadPreset(selected);
       console.log("脚手架配置：" + preset.manifest.id +
         "，共 " + preset.manifest.components.length + " 个组件。");
     }
-    await this.state.rememberPreset(file);
+    await this.state.rememberPreset(selected);
   }
 
   async importContest(value: string, rootArg?: string, presetPath?: string): Promise<void> {
