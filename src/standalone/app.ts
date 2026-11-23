@@ -28,6 +28,7 @@ function usage() {
     "  accoding file PATH               当前文件的简洁操作菜单",
     "  accoding status [--watch]        查询等待中的 OJ 评测"
     "  accoding sync                    手动同步题目与比赛",
+    "  accoding config preset PATH      设置默认脚手架配置",
     "",
     "  --root DIR                       指定工作区（初始化/同步/查询）",
     "  --preset MANIFEST                初始化时使用自定义 C99 配置",
@@ -182,6 +183,8 @@ async function tui(app: StandaloneWorkflow): Promise<void> {
         { label: "导入单题", value: "problem" },
         { label: "查看已 AC 题目", value: "accepted" },
         { label: "手动同步比赛与题目", value: "sync" },
+        { label: "切换工作区目录", value: "workspace" },
+        { label: "设置脚手架配置", value: "preset" },
         { label: "查看待查询的 OJ 提交", value: "status" },
         { label: "切换 C / C++", value: "language" },
         { label: "打开当前题目的文件夹", value: "folder" },
@@ -198,6 +201,16 @@ async function tui(app: StandaloneWorkflow): Promise<void> {
         const picked = await chooseProblem(app, true);
         if (picked) await fileMenu(app, picked);
       } else if (extra === "sync") await app.sync();
+      else if (extra === "workspace") {
+        const currentRoot = (await app.state.load()).lastWorkspace || process.cwd();
+        const directory = await ask("工作区目录", currentRoot);
+        if (directory) { await app.workspaceRoot(directory); current = undefined; }
+      } else if (extra === "preset") {
+        const state = await app.state.load();
+        console.log("当前配置：" + (state.presetPath || "内置示例"));
+        const entry = await ask("输入配置 manifest.json 路径，或输入 default 恢复内置配置", "default");
+        await app.setPreset(entry === "default" ? undefined : entry);
+      }
       else if (extra === "status") await app.status(undefined, true);
       else if (extra === "language" && current) current = await app.selectSource(current);
       else if (extra === "folder" && current) await openFolder(current.source);
@@ -241,6 +254,10 @@ async function run(): Promise<void> {
       return;
     }
     if (command === "sync") { await app.sync(root); return; }
+    if (command === "config" && args[1] === "preset" && args[2]) {
+      await app.setPreset(args[2] === "default" ? undefined : args[2]);
+      return;
+    }
     if (command === "status") { await app.status(root, args.includes("--watch")); return; }
     usage();
     throw new Error("不支持的命令。");
