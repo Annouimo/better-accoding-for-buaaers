@@ -4,7 +4,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { WorkspaceStore } from "../../src/workspace/store";
-import { StandaloneWorkflow } from "../../src/standalone/workflow";
+import type { Problem } from "../../src/model";
 import { StateStore, activityAccepted } from "../../src/standalone/state";
 import { droppedPath, readableName, initializeFriendlyLayout,
   isFriendlyWorkspace, readableProblemDirectory } from "../../src/standalone/workspaces";
@@ -25,7 +25,7 @@ test("new friendly workspace works and legacy sources are preserved", async () =
     assert.equal(await initializeFriendlyLayout(root), true);
     assert.equal(await isFriendlyWorkspace(root), true);
     const store = new WorkspaceStore(root);
-    const problem = {
+    const problem: Problem = {
       target: { kind: "problemset", problemId: "987654" },
       title: "数组/求和",
       label: "A",
