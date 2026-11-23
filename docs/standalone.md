@@ -26,6 +26,37 @@ The tool copies the selected scaffold preset into each question folder and gener
 
 The local OJ session uses macOS Keychain or Windows DPAPI; Linux currently has session-only storage. Submission IDs are stored for pending verdict queries. Network POST is never automatically re-sent when the outcome is uncertain. Only OJ AC hides a task as solved; post-contest problemset acceptance is not counted as contest AC.
 
+
+## P0 directory selection and readable names
+
+For a new contest, the terminal proposes \`~/Accoding/<contest title>/\`; you may paste or drag a Finder/Explorer folder into the prompt. The chosen folder becomes the **workspace root**. It then contains readable problem folders such as \`A-字符统计/\` instead of numeric directories. A single imported problem gets a suggested directory named after the problem. Invalid filename characters are removed and collisions get an ID suffix.
+
+The CLI can bypass the interactive prompt:
+
+~~~sh
+accoding contest init 1234 --root "/Users/you/Documents/C语言练习/第七次作业"
+~~~
+
+Existing numeric workspaces are never renamed. They continue to work with their original internal metadata. Friendly workspaces store contest rosters in \`.better-accoding/rosters/\`, not a visible \`contests/<id>/\` folder.
+
+## Importing the real exam-kit preset
+
+The preset remains owned by the [independent c-exam-kit repository](https://github.com/Annouimo/c-exam-kit/tree/feat/lightweight-io-standalone-preset). Clone it locally (or extract a ZIP), then set its directory or manifest as the CLI default:
+
+~~~sh
+accoding config preset "/Users/you/c-exam-kit/scaffold/presets/exam-io-c99"
+# or:
+accoding config preset "/Users/you/c-exam-kit/scaffold/presets/exam-io-c99/manifest.json"
+~~~
+
+Drag-and-drop also works in the TUI settings. Each new question receives an immutable **snapshot** of the selected version; updates to c-exam-kit do not change already initialized question code. The integration CI compiles the actual input/output macros including \`read_ints\` and \`print_ints\` into a standalone C99 source file.
+
+## Where data lives
+
+Run \`accoding config paths\` to display local paths. On macOS, normal state is in \`~/.config/accoding-tui/state.json\`; passwords and serialized cookie sessions, if the user opts to stay logged in, are in Keychain under the \`Annouimo.AccodingTUI\` service. On Windows, settings are under \`%APPDATA%\\accoding-tui\` and DPAPI-encrypted secrets are in the same directory. The login prompt now offers a **session-only** choice, which retains neither cookie nor credentials after process exit. Per-problem samples, submission states, code and scaffold snapshots live in the selected workspace.
+
+A macOS Keychain adapter still uses the \`security\` executable with short-lived encoded credential arguments; replacing it with a native binding remains a hardening task before final release.
+
 ## Safety and limitations
 
 The local judge executes user source with the user's permissions; it is not a sandbox. The tool is not authorized by default for coursework examinations, even if reference material is allowed. No AI is used at runtime. Credentials must not be committed. macOS Keychain CLI currently passes the encrypted-store value through short-lived process arguments; a future native adapter could improve this.
