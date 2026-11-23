@@ -37,6 +37,8 @@ export interface Toolchain {
   cpp: string;
   cArgs: string[];
   cppArgs: string[];
+  cLinkArgs?: string[];
+  cppLinkArgs?: string[];
   timeoutMs: number;
   outputLimit: number;
 }
@@ -101,6 +103,7 @@ export async function compile(
     artifactArgument(snapshot),
     "-o",
     artifactArgument(program),
+    ...(isC ? toolchain.cLinkArgs ?? [] : toolchain.cppLinkArgs ?? []),
   ];
   const configuredCompiler = isC ? toolchain.c : toolchain.cpp;
   const compiler =
