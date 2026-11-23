@@ -17,6 +17,7 @@ import { builtinPreset } from "./generated-preset";
 import { StateStore, isAccepted, activityAccepted } from "./state";
 import { credentialsBackend } from "./secrets";
 import { ask, confirm, interactive, select, password } from "./terminal";
+import { selectWorkspaceDirectory, initializeFriendlyLayout, isFriendlyWorkspace, readableProblemDirectory, droppedPath } from "./workspaces";
 
 export interface ResolvedProblem {
   root: string;
@@ -139,7 +140,7 @@ export class StandaloneWorkflow {
 
   async workspaceRoot(explicit?: string): Promise<string> {
     const saved = await this.state.load();
-    const root = path.resolve(explicit || saved.lastWorkspace ||
+    const root = droppedPath(explicit || saved.lastWorkspace ||
       path.join(os.homedir(), "Accoding"));
     await fs.mkdir(root, { recursive: true });
     await this.state.rememberWorkspace(root);
@@ -147,8 +148,9 @@ export class StandaloneWorkflow {
   }
 
   private async ensureScaffold(root: string, binding: Binding, preset: LoadedPreset): Promise<void> {
-    const target = defaultSourceFiles(binding.problem.target);
-    const source = localPath(root, target.c);
+    const fallback = defaultSourceFiles(binding.problem.target);
+    const sourceDir = binding.problemDirectory ?? path.posix.dirname(fallback.c);
+    const source = localPath(root, path.posix.join(sourceDir, "main.c"));
     const directory = path.dirname(source);
     const existingPreset = path.join(directory, ".accoding", "scaffold", "manifest.json");
     const chosen = (await fileExists(existingPreset))
@@ -166,7 +168,7 @@ export class StandaloneWorkflow {
         "utf8");
     // Do not bring the original VS Code extension\'s large competitive template
     // into the minimal standalone C++ workflow.
-    const cpp = localPath(root, target.cpp);
+    const cpp = localPath(root, path.posix.join(sourceDir, "main.cpp"));
     if (await fs.readFile(cpp, "utf8") === cppTemplate)
       await fs.writeFile(cpp,
         "#include <iostream>\n\nint main() {\n    return 0;\n}\n", "utf8");
@@ -200,14 +202,17 @@ export class StandaloneWorkflow {
   async importContest(value: string, rootArg?: string, presetPath?: string): Promise<void> {
     const account = await this.account();
     if (!account) throw new Error("未登录");
-    const root = await this.workspaceRoot(rootArg);
     const input = parseImport(value, "contest");
     if (input.kind !== "contest") throw new Error("请提供比赛 ID 或比赛链接。");
     const snapshot = await fetchContestSnapshotForImport(this.session.client, input.id,
       (line) => console.log(line));
+    const picked = await selectWorkspaceDirectory(snapshot.title, rootArg);
+    const root = await this.workspaceRoot(picked);
+    const friendly = await initializeFriendlyLayout(root);
     const workspace = new WorkspaceStore(root);
     const preset = await this.activePreset(presetPath);
-    const imported = await syncContest(workspace, snapshot);
+    const imported = await syncContest(workspace, snapshot, undefined, undefined,
+      friendly ? (problem) => readableProblemDirectory(root, problem) : undefined);
     for (const binding of imported) await this.ensureScaffold(root, binding, preset);
     if (imported.length) {
       const recent = imported.find((b) => !b.unavailable);
@@ -243,7 +248,7 @@ export class StandaloneWorkflow {
       }
       for (const [id, verdict] of latest) {
         const target = targets.get(id)!;
-        await this.state.rememberProblem(root, bindingId(target), account, { verdict });
+        await this.state.recordVerdict(root, bindingId(target), account, verdict);
       }
     } catch (error) {
       console.warn("未能同步旧提交状态，稍后可以手动更新：" +
@@ -254,7 +259,6 @@ export class StandaloneWorkflow {
   async importProblem(value: string, rootArg?: string, presetPath?: string): Promise<void> {
     const account = await this.account();
     if (!account) throw new Error("未登录");
-    const root = await this.workspaceRoot(rootArg);
     const input = parseImport(value, "problemset");
     if (input.kind !== "problemset") throw new Error("请提供独立题号或题目链接。");
     let problem: Problem;
@@ -266,8 +270,12 @@ export class StandaloneWorkflow {
         throw error;
       problem = await new ProblemsetAdapter(this.session.client.adminReader()).fetch(input.id);
     }
+    const picked = await selectWorkspaceDirectory(problem.title, rootArg);
+    const root = await this.workspaceRoot(picked);
+    const friendly = await initializeFriendlyLayout(root);
     const workspace = new WorkspaceStore(root);
-    const binding = await workspace.import(problem);
+    const binding = await workspace.import(problem,
+      friendly ? await readableProblemDirectory(root, problem) : undefined);
     await this.ensureScaffold(root, binding, await this.activePreset(presetPath));
     await this.state.rememberProblem(root, binding.bindingId, account);
     console.log("已导入：" + binding.problem.title);
@@ -283,7 +291,9 @@ export class StandaloneWorkflow {
       b.problem.target.kind === "contest" ? [b.problem.target.contestId] : []))];
     for (const id of contestIds) {
       const snapshot = await fetchContestSnapshotForImport(this.session.client, id);
-      const bindings = await syncContest(workspace, snapshot);
+      const friendly = await isFriendlyWorkspace(root);
+      const bindings = await syncContest(workspace, snapshot, undefined, undefined,
+        friendly ? (problem) => readableProblemDirectory(root, problem) : undefined);
       for (const binding of bindings) {
         if (!binding.unavailable)
           await this.ensureScaffold(root, binding, await this.activePreset());
@@ -315,9 +325,13 @@ export class StandaloneWorkflow {
         const workspace = new WorkspaceStore(directory);
         const bindings = await workspace.list();
         const binding = bindings.find((item) => {
-          const files = defaultSourceFiles(item.problem.target);
-          const sourceDirectory = path.dirname(localPath(directory, files.c));
-          return path.resolve(sourceDirectory) === path.dirname(source);
+          const known = defaultSourceFiles(item.problem.target);
+          const folder = item.problemDirectory ?? path.posix.dirname(known.c);
+          const sourceDirectory = localPath(directory, folder);
+          if (path.dirname(source) !== sourceDirectory) return false;
+          // Only managed entrypoints, or an explicitly bound custom source, can be submitted.
+          return ["main.c", "main.cpp"].includes(path.basename(source)) ||
+            path.resolve(directory, item.sourceFile) === source;
         });
         if (!binding) throw new Error("当前文件不属于已初始化的题目。");
         if (binding.unavailable) throw new Error("题目已从比赛移除，暂不能提交。");
@@ -372,7 +386,8 @@ export class StandaloneWorkflow {
     }
     const storage = path.join(resolved.root, ".accoding", "runs");
     this.tested.delete(resolved.source);
-    const result = await judge(prepared.source, storage, cases, await this.configuredToolchain());
+    const result = await judge(prepared.source, storage, cases,
+      await this.configuredToolchain(), undefined, path.dirname(resolved.source));
     try {
       if (result.compilation.exitCode !== 0 || result.compilation.reason) {
         console.error("编译失败：\n" + result.compilation.stderr);
@@ -447,7 +462,8 @@ export class StandaloneWorkflow {
       prepared = { source: submissionPath, code: codeSnapshot };
     }
     const storage = path.join(resolved.root, ".accoding", "runs");
-    const checked = await compile(prepared.source, storage, await this.configuredToolchain());
+    const checked = await compile(prepared.source, storage,
+      await this.configuredToolchain(), undefined, false, path.dirname(resolved.source));
     try {
       if (checked.result.exitCode !== 0 || checked.result.reason)
         throw new Error("提交前编译失败，未上传：\n" + checked.result.stderr);
@@ -554,8 +570,11 @@ export class StandaloneWorkflow {
       const source = sourceFor(binding, root);
       const activity = this.state.getActivity(state, root, binding.bindingId, account);
       let modified = 0;
-      for (const file of [source, ...Object.values(defaultSourceFiles(binding.problem.target))
-        .map((p) => localPath(root, p))]) {
+      const known = defaultSourceFiles(binding.problem.target);
+      const base = binding.problemDirectory ?? path.posix.dirname(known.c);
+      for (const file of [source,
+        localPath(root, path.posix.join(base, "main.c")),
+        localPath(root, path.posix.join(base, "main.cpp"))]) {
         try { modified = Math.max(modified, (await fs.stat(file)).mtimeMs); }
         catch { /* Optional source may not exist. */ }
       }
@@ -579,9 +598,10 @@ export class StandaloneWorkflow {
 
   async selectSource(problem: ResolvedProblem): Promise<ResolvedProblem> {
     const files = defaultSourceFiles(problem.binding.problem.target);
+    const base = problem.binding.problemDirectory ?? path.posix.dirname(files.c);
     const result = await select("选择源码语言", [
-      { label: "C (.c)", value: files.c },
-      { label: "C++ (.cpp)", value: files.cpp }
+      { label: "C (.c)", value: path.posix.join(base, "main.c") },
+      { label: "C++ (.cpp)", value: path.posix.join(base, "main.cpp") }
     ]);
     if (!result) return problem;
     const source = localPath(problem.root, result);
