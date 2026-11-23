@@ -26,7 +26,7 @@ function usage() {
     "  accoding test PATH               测试当前 C/C++ 源文件",
     "  accoding submit PATH             提交源文件",
     "  accoding file PATH               当前文件的简洁操作菜单",
-    "  accoding status [--watch]        查询等待中的 OJ 评测"
+    "  accoding status [--watch]        查询等待中的 OJ 评测",
     "  accoding sync                    手动同步题目与比赛",
     "  accoding config preset PATH      设置默认脚手架配置",
     "  accoding config compiler c PATH  设置 C 编译器路径",
