@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { WorkspaceStore } from "../../src/workspace/store";
 import { StandaloneWorkflow } from "../../src/standalone/workflow";
-import { StateStore, isAccepted } from "../../src/standalone/state";
+import { StateStore, isAccepted, activityAccepted } from "../../src/standalone/state";
 import { builtinPreset } from "../../src/standalone/generated-preset";
 import { renderHeader } from "../../src/standalone/scaffold";
 
@@ -21,6 +21,10 @@ test("state persists verdict per account and source path", async () => {
     assert.equal(isAccepted(state.getActivity(loaded, root, "contest-123-1", "account-2").verdict), false);
     assert.equal(state.isLastProblem(loaded, root, "contest-123-1", "account-1"), true);
     assert.equal(state.isLastProblem(loaded, root, "contest-123-2", "account-1"), false);
+    await state.rememberProblem(root, "contest-123-1", "account-1", { verdict: "WA" });
+    const updated = await state.load();
+    assert.equal(activityAccepted(state.getActivity(updated, root, "contest-123-1", "account-1")), true);
+    assert.equal(state.getActivity(updated, root, "contest-123-1", "account-1").verdict, "WA");
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }
