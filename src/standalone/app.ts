@@ -4,7 +4,7 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { StandaloneWorkflow, type ResolvedProblem } from "./workflow";
 import { ask, confirm, interactive, select } from "./terminal";
-import { isAccepted } from "./state";
+import { activityAccepted } from "./state";
 
 function option(args: string[], name: string): string | undefined {
   const at = args.indexOf(name);
@@ -92,8 +92,8 @@ async function chooseProblem(
   const state = await app.state.load();
   const account = app.session.user?.id ?? state.lastAccount ?? "offline";
   const relevant = items.filter((entry) =>
-    isAccepted(app.state.getActivity(state, entry.root, entry.binding.bindingId, account)
-      .verdict) === onlyAccepted);
+    activityAccepted(app.state.getActivity(state, entry.root, entry.binding.bindingId, account))
+      === onlyAccepted);
   const selected = await select(onlyAccepted ? "已 AC 题目" : "尚未 AC 的题目",
     relevant.map((entry, index) => ({
       value: String(index),
@@ -128,10 +128,13 @@ async function tui(app: StandaloneWorkflow): Promise<void> {
     const all = await app.list();
     const state = await app.state.load();
     const account = app.session.user?.id ?? state.lastAccount ?? "offline";
-    const pending = all.filter((entry) => !isAccepted(
-      app.state.getActivity(state, entry.root, entry.binding.bindingId, account).verdict
+    const pending = all.filter((entry) => !activityAccepted(
+      app.state.getActivity(state, entry.root, entry.binding.bindingId, account)
     ));
-    if (!current || !all.some((item) => item.binding.bindingId === current!.binding.bindingId))
+    const currentSolved = current && activityAccepted(app.state.getActivity(
+      state, current.root, current.binding.bindingId, account));
+    if (!current || currentSolved ||
+        !all.some((item) => item.binding.bindingId === current!.binding.bindingId))
       current = pending[0];
     if (!current && all.length) console.log("\n当前工作区的题目均已 AC。");
 
