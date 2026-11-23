@@ -6,6 +6,7 @@ import { login, currentUser, ContestAdapter, ProblemsetAdapter } from "../accodi
 import { fetchContestSnapshotForImport } from "../accoding/import";
 import { syncContest } from "../workspace/contest";
 import { WorkspaceStore } from "../workspace/store";
+import { atomicWrite, safePath } from "../workspace/fs";
 import { defaultSourceFiles, cTemplate, cppTemplate } from "../workspace/sources";
 import { compile, judge, type Toolchain } from "../judge/judge";
 import { sendSubmission } from "../submissions/send";
@@ -353,34 +354,57 @@ export class StandaloneWorkflow {
     throw new Error("找不到 Accoding 工作区。请先通过 TUI 初始化比赛或单题。");
   }
 
-  async prepare(resolved: ResolvedProblem): Promise<{ source: string; code: string }> {
-    const original = await fs.readFile(resolved.source, "utf8");
+  /**
+   * Immutable, content-addressed source snapshots ensure independent editor
+   * tasks never compile each other's in-progress generated C/C++ code.
+   */
+  private async freezeSource(resolved: ResolvedProblem, code: string): Promise<string> {
     const ext = path.extname(resolved.source).toLowerCase();
+    const relative = path.relative(resolved.root, path.join(
+      path.dirname(resolved.source), ".accoding", "generated", hash(code) + ext));
+    const location = await safePath(resolved.root, relative);
+    await fs.mkdir(path.dirname(location), { recursive: true });
+    try {
+      const existing = await fs.readFile(location, "utf8");
+      if (existing !== code)
+        throw new Error("源码快照的内容与哈希不匹配，已停止编译。");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      await atomicWrite(location, code);
+    }
+    return location;
+  }
+
+  async prepare(resolved: ResolvedProblem): Promise<{
+    source: string; code: string; originalHash: string
+  }> {
+    const original = await fs.readFile(resolved.source, "utf8");
+    const originalHash = hash(original);
+    const ext = path.extname(resolved.source).toLowerCase();
+    let code = original;
     if (ext !== ".c") {
       if (/^\s*#\s*include\s*"/m.test(original))
         throw new Error("C++ 第一版不支持自动展开自定义头文件，请先合并为单文件。");
-      return { source: resolved.source, code: original };
+    } else {
+      const presetFile = path.join(path.dirname(resolved.source),
+        ".accoding", "scaffold", "manifest.json");
+      if (!(await fileExists(presetFile))) {
+        if (/^\s*#\s*include\s*"/m.test(original))
+          throw new Error("使用了本地头文件，但未找到可展开的脚手架配置快照。");
+      } else {
+        const preset = await loadPreset(presetFile);
+        const includes = original.split(/\r?\n/).some((line) =>
+          new RegExp('^\\s*#\\s*include\\s*"' +
+            preset.manifest.headerFile.replace(/\./g, "\\.") + '"').test(line));
+        if (!includes) {
+          if (/^\s*#\s*include\s*"/m.test(original))
+            throw new Error("检测到其他本地头文件；C99 单文件模式只支持配置中的头文件。");
+        } else {
+          code = assembleC(original, preset).code;
+        }
+      }
     }
-    const presetFile = path.join(path.dirname(resolved.source),
-      ".accoding", "scaffold", "manifest.json");
-    if (!(await fileExists(presetFile))) {
-      if (/^\s*#\s*include\s*"/m.test(original))
-        throw new Error("使用了本地头文件，但未找到可展开的脚手架配置快照。");
-      return { source: resolved.source, code: original };
-    }
-    const preset = await loadPreset(presetFile);
-    const hasInclude = original.split(/\r?\n/).some((line) =>
-      new RegExp('^\\s*#\\s*include\\s*"' + preset.manifest.headerFile.replace(/\./g, "\\.") + '"').test(line));
-    if (!hasInclude) {
-      if (/^\s*#\s*include\s*"/m.test(original))
-        throw new Error("检测到其他本地头文件；C99 单文件模式只支持配置中的头文件。");
-      return { source: resolved.source, code: original };
-    }
-    const assembled = assembleC(original, preset);
-    const location = path.join(path.dirname(resolved.source), ".accoding", "submit.c");
-    await fs.mkdir(path.dirname(location), { recursive: true });
-    await fs.writeFile(location, assembled.code, "utf8");
-    return { source: location, code: assembled.code };
+    return { source: await this.freezeSource(resolved, code), code, originalHash };
   }
 
   async test(resolved: ResolvedProblem): Promise<boolean> {
@@ -418,7 +442,7 @@ export class StandaloneWorkflow {
         result.cases.every((c) => c.status === "PASS");
       console.log(allPass ? "全部本地样例通过。" : "有用例未通过。");
       if (allPass) this.tested.set(resolved.source, {
-        code: prepared.code, stamp: hash(await fs.readFile(resolved.source, "utf8"))
+        code: prepared.code, stamp: prepared.originalHash
       });
       return allPass;
     } finally {
@@ -463,13 +487,13 @@ export class StandaloneWorkflow {
       const current = hash(await fs.readFile(resolved.source, "utf8"));
       if (current !== tested.stamp)
         throw new Error("测试后源码发生修改，请重新测试。");
-      const ext = path.extname(resolved.source).toLowerCase();
-      const submissionPath = path.join(path.dirname(resolved.source),
-        ".accoding", "tested-submit" + ext);
-      await fs.mkdir(path.dirname(submissionPath), { recursive: true });
-      await fs.writeFile(submissionPath, codeSnapshot, "utf8");
-      prepared = { source: submissionPath, code: codeSnapshot };
+      prepared = {
+        source: await this.freezeSource(resolved, codeSnapshot),
+        code: codeSnapshot
+      };
     }
+    if (hash(await fs.readFile(prepared.source, "utf8")) !== hash(prepared.code))
+      throw new Error("编译用源码快照发生变化，已取消提交。");
     const storage = path.join(resolved.root, ".accoding", "runs");
     const checked = await compile(prepared.source, storage,
       await this.configuredToolchain(), undefined, false, path.dirname(resolved.source));
