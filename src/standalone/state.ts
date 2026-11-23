@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 
@@ -54,7 +55,7 @@ export class StateStore {
 
   async save(state: ApplicationState): Promise<void> {
     await fs.mkdir(path.dirname(this.file), { recursive: true, mode: 0o700 });
-    const temp = this.file + "." + process.pid + ".tmp";
+    const temp = this.file + "." + randomUUID() + ".tmp";
     await fs.writeFile(temp, JSON.stringify(state, null, 2) + "\n",
       { encoding: "utf8", mode: 0o600, flag: "wx" });
     try {
