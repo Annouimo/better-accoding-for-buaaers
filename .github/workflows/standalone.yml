@@ -29,6 +29,33 @@ jobs:
         run: node scripts/embed-standalone-preset.mjs
       - name: Scaffold unit tests
         run: bun test tests/standalone
+      - name: Check out independent c-exam-kit IO preset
+        uses: actions/checkout@v4
+        with:
+          repository: Annouimo/c-exam-kit
+          ref: feat/lightweight-io-standalone-preset
+          path: exam-kit
+      - name: Integrate actual exam-kit Manifest v1, macros and dependency expansion
+        shell: bash
+        run: |
+          set -euo pipefail
+          PRESET="$GITHUB_WORKSPACE/exam-kit/scaffold/presets/exam-io-c99"
+          bun src/standalone/cli.ts scaffold init /tmp/exam-io-standalone --preset "$PRESET"
+          cat > /tmp/exam-io-standalone/main.c <<'EOF'
+          #include "exam.h"
+          int main(void) {
+              int n = read_int();
+              int a[4];
+              read_ints(a, n);
+              print_ints(a, n, " ", "\n");
+              return 0;
+          }
+          EOF
+          bun src/standalone/cli.ts scaffold prepare /tmp/exam-io-standalone/main.c
+          grep -q 'read_ints_into' /tmp/exam-io-standalone/.accoding/submit.c
+          ! grep -q 'read_doubles_into' /tmp/exam-io-standalone/.accoding/submit.c
+          cc -std=c99 /tmp/exam-io-standalone/.accoding/submit.c -lm -o /tmp/accoding-exam-io
+          test "$(printf '3 10 20 30\n' | /tmp/accoding-exam-io)" = "10 20 30"
       - name: Standalone help
         run: bun src/standalone/app.ts --help
       - name: Minimal C99 scaffold smoke
