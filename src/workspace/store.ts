@@ -114,7 +114,7 @@ export class WorkspaceStore {
       throw new Error("绑定来源不匹配。");
     await safePath(this.root, parsed.data.sourceFile);
     const binding = parsed.data;
-    await this.ensureSources(binding.problem);
+    await this.ensureSources(binding.problem, binding.problemDirectory);
     const previous = structuredClone(binding);
     const observed = this.observed.get(id);
     const metadataChanged =
@@ -220,8 +220,10 @@ export class WorkspaceStore {
       throw new Error("用例已不存在。");
     return safePath(this.root, caseFile(binding, caseId, kind));
   }
-  private async ensureSources(problem: Problem) {
-    const files = defaultSourceFiles(problem.target);
+  private async ensureSources(problem: Problem, directory?: string) {
+    const files = directory
+      ? { c: `${directory}/main.c`, cpp: `${directory}/main.cpp` }
+      : defaultSourceFiles(problem.target);
     for (const [relative, template] of [
       [files.c, cTemplate],
       [files.cpp, cppTemplate],
@@ -235,7 +237,7 @@ export class WorkspaceStore {
       }
     }
   }
-  async import(problem: Problem): Promise<Binding> {
+  async import(problem: Problem, directory?: string): Promise<Binding> {
     return this.serialize(async () => {
       problem = problemSchema.parse(problem);
       const id = bindingId(problem.target);
@@ -244,8 +246,15 @@ export class WorkspaceStore {
       } catch (e) {
         if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
       }
-      await this.ensureSources(problem);
-      const files = defaultSourceFiles(problem.target);
+      if (directory) {
+        const marker = await safePath(this.root, `${directory}/main.c`);
+        if (!marker.endsWith(path.join(directory, "main.c")))
+          throw new Error("Invalid problem source directory");
+      }
+      await this.ensureSources(problem, directory);
+      const files = directory
+        ? { c: `${directory}/main.c`, cpp: `${directory}/main.cpp` }
+        : defaultSourceFiles(problem.target);
       const sourceFile = problem.languages.includes("c") ? files.c : files.cpp;
       const binding: Binding = {
         schemaVersion: 2,
@@ -253,6 +262,7 @@ export class WorkspaceStore {
         bindingId: id,
         problem,
         sourceFile,
+        ...(directory ? { problemDirectory: directory } : {}),
         fetchedAt: new Date().toISOString(),
         revision: 0,
         cases: problem.samples.map((s, i) => ({
