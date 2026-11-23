@@ -477,6 +477,9 @@ export class StandaloneWorkflow {
   ): Promise<void> {
     const account = await this.account();
     if (!account) throw new Error("未登录");
+    // A direct editor submit is a user action, not merely an OJ status refresh.
+    await this.state.rememberProblem(resolved.root, resolved.binding.bindingId,
+      account, { sourceFile: resolved.source });
     let prepared: { source: string; code: string };
     if (codeSnapshot === undefined) {
       prepared = await this.prepare(resolved);
@@ -633,9 +636,18 @@ export class StandaloneWorkflow {
         try { modified = Math.max(modified, (await fs.stat(file)).mtimeMs); }
         catch { /* Optional source may not exist. */ }
       }
+      // The remembered path is advisory; it must still point to an existing
+      // managed source, not a deleted/moved file or a stale external path.
+      let selected = source;
+      if (activity.sourceFile) {
+        const proposed = path.resolve(activity.sourceFile);
+        const allowed = path.dirname(proposed) === path.dirname(source) &&
+          (proposed === source || ["main.c", "main.cpp"].includes(path.basename(proposed)));
+        if (allowed && await fileExists(proposed)) selected = proposed;
+      }
       return {
         root, workspace, binding,
-        source: activity.sourceFile || source,
+        source: selected,
         modified: Math.max(modified, Date.parse(activity.lastActiveAt || "") || 0),
         verdict: activity.verdict,
         accepted: activityAccepted(activity),
