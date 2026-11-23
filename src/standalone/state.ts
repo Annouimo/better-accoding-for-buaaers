@@ -4,6 +4,7 @@ import path from "node:path";
 
 export interface ProblemActivity {
   verdict?: string;
+  accepted?: boolean;
   lastActiveAt?: string;
   sourceFile?: string;
 }
@@ -89,8 +90,13 @@ export class StateStore {
   ): Promise<void> {
     const state = await this.load();
     const key = activityKey(root, bindingId, account);
+    const previous = state.problems[key] || {};
     state.problems[key] = {
-      ...state.problems[key], ...changes, lastActiveAt: new Date().toISOString()
+      ...previous, ...changes,
+      // AC is sticky: an additional WA submission does not undo an earlier AC.
+      accepted: Boolean(previous.accepted || isAccepted(previous.verdict) ||
+        isAccepted(changes.verdict)),
+      lastActiveAt: new Date().toISOString()
     };
     state.lastWorkspace = path.resolve(root);
     state.lastProblem = key;
@@ -113,4 +119,8 @@ export class StateStore {
 
 export function isAccepted(verdict?: string): boolean {
   return verdict?.trim().toUpperCase() === "AC";
+}
+
+export function activityAccepted(activity: ProblemActivity): boolean {
+  return Boolean(activity.accepted || isAccepted(activity.verdict));
 }
