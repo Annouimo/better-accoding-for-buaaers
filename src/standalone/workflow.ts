@@ -14,7 +14,7 @@ import { monitorSubmissions } from "../submissions/monitor";
 import { bindingId, hash, parseImport, type Binding, type Problem, type Target } from "../model";
 import { assembleC, initializeHeader, loadPreset, type LoadedPreset } from "./scaffold";
 import { builtinPreset } from "./generated-preset";
-import { StateStore, isAccepted } from "./state";
+import { StateStore, isAccepted, activityAccepted } from "./state";
 import { credentialsBackend } from "./secrets";
 import { ask, confirm, interactive, select, password } from "./terminal";
 
@@ -564,11 +564,12 @@ export class StandaloneWorkflow {
         source: activity.sourceFile || source,
         modified: Math.max(modified, Date.parse(activity.lastActiveAt || "") || 0),
         verdict: activity.verdict,
+        accepted: activityAccepted(activity),
         last: this.state.isLastProblem(state, root, binding.bindingId, account)
       };
     }));
     entries.sort((a, b) =>
-      Number(isAccepted(a.verdict)) - Number(isAccepted(b.verdict)) ||
+      Number(a.accepted) - Number(b.accepted) ||
       Number(b.last) - Number(a.last) ||
       b.modified - a.modified ||
       a.binding.problem.label.localeCompare(b.binding.problem.label));
