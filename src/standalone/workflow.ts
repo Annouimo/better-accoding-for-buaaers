@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { AccountSession } from "../auth/session";
 import { login, currentUser, ContestAdapter, ProblemsetAdapter } from "../accoding/adapters";
@@ -32,6 +33,7 @@ export function toolchain(): Toolchain {
       (process.platform === "win32" ? "g++" : "c++"),
     cArgs: ["-std=c99", "-O2", "-Wall", "-Wextra", "-Wno-unused-function"],
     cppArgs: ["-std=c++17", "-O2", "-Wall", "-Wextra"],
+    cLinkArgs: ["-lm"],
     timeoutMs: 2000,
     outputLimit: 4 * 1024 * 1024
   };
@@ -138,7 +140,7 @@ export class StandaloneWorkflow {
   async workspaceRoot(explicit?: string): Promise<string> {
     const saved = await this.state.load();
     const root = path.resolve(explicit || saved.lastWorkspace ||
-      path.join(process.cwd(), "accoding-workspace"));
+      path.join(os.homedir(), "Accoding"));
     await fs.mkdir(root, { recursive: true });
     await this.state.rememberWorkspace(root);
     return root;
