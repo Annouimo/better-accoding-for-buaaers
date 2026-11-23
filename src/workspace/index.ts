@@ -52,9 +52,11 @@ export async function readContestRoster(
   root: string,
   id: string,
 ): Promise<ContestRoster | undefined> {
-  const raw = await optional(
-    await safePath(root, `contests/${idSchema.parse(id)}/contest.json`),
-  );
+  const legacy = await optional(await safePath(root,
+    `contests/${idSchema.parse(id)}/contest.json`));
+  const modern = await optional(await safePath(root,
+    `.better-accoding/rosters/${idSchema.parse(id)}.json`));
+  const raw = modern ?? legacy;
   if (raw === undefined) return;
   const parsed = rosterSchema.safeParse(raw);
   if (!parsed.success || parsed.data.id !== id)
@@ -109,13 +111,13 @@ export async function writeContestRoster(
   };
   if (new Set(roster.problems.map((p) => p.id)).size !== roster.problems.length)
     throw Error("比赛题目 ID 重复。");
-  await atomicWrite(
-    await safePath(
-      root,
-      `contests/${idSchema.parse(snapshot.id)}/contest.json`,
-    ),
-    JSON.stringify(roster, null, 2),
-  );
+  const friendly = await optional(await safePath(root,
+    ".better-accoding/friendly-layout.json"));
+  const destination = friendly?.version === 1
+    ? `.better-accoding/rosters/${idSchema.parse(snapshot.id)}.json`
+    : `contests/${idSchema.parse(snapshot.id)}/contest.json`;
+  await atomicWrite(await safePath(root, destination),
+    JSON.stringify(roster, null, 2));
 }
 /** Derived index: binding transactions are authoritative. Caller holds the workspace lock. */
 export async function writeWorkspaceIndex(root: string) {
