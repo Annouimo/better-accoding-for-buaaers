@@ -512,12 +512,35 @@ export class StandaloneWorkflow {
     const root = await this.workspaceRoot(rootArg);
     const store = new SubmissionStore(path.join(root, ".accoding", "submissions"));
     const attempts = await store.list(account);
-    const pending = attempts.filter((entry) =>
-      entry.state === "Pending" && entry.submission && isPending(entry.submission));
     const uncertain = attempts.filter((entry) =>
       entry.state === "UnknownOutcome" || entry.state === "Sending");
-    if (uncertain.length)
-      console.log(uncertain.length + " 条提交结果不确定；不会自动重发，请到 Accoding 核对。");
+    // Only the problemset adapter can verify the submitted source itself.
+    // Never infer an identity from timing alone and never retry an unknown POST.
+    for (const attempt of uncertain) {
+      if (attempt.target.kind !== "problemset" || !attempt.sourceHash) continue;
+      try {
+        const adapter = new ProblemsetAdapter(
+          attempt.target.service === "admin"
+            ? this.session.client.adminReader() : this.session.client);
+        const recovered = await adapter.recoverAttempt(attempt.target, account, attempt);
+        if (!recovered) continue;
+        await store.observe(account, recovered, attempt.attemptId);
+        await this.state.recordVerdict(root, bindingId(recovered.target),
+          account, recovered.result);
+        console.log("已核实并恢复提交 ID：" + recovered.id);
+      } catch (error) {
+        console.warn("无法核实历史提交，已保留未决状态：" +
+          (error instanceof Error ? error.message : String(error)));
+      }
+    }
+    const refreshed = await store.list(account);
+    const pending = refreshed.filter((entry) =>
+      entry.state === "Pending" && entry.submission && isPending(entry.submission));
+    const unresolved = refreshed.filter((entry) =>
+      entry.state === "UnknownOutcome" || entry.state === "Sending");
+    if (unresolved.length)
+      console.log(unresolved.length +
+        " 条提交结果仍不确定；不会自动重发，请到 Accoding 核对。");
     if (!pending.length) {
       console.log("没有待查询的远程评测。");
       return;
