@@ -62,9 +62,14 @@ test("standalone C and C++ judge share the same persisted official samples", asy
       JSON.stringify(preset.manifest));
     await fs.writeFile(path.join(folder, "exam.h"), renderHeader(preset));
     const source = path.join(folder, "main.c");
+    // The generated compile source is nested under .accoding/generated, but
+    // relative file paths must still resolve in the real problem folder.
+    await fs.writeFile(path.join(folder, "local-input.txt"), "available\n");
     await fs.writeFile(source,
       '#include <stdio.h>\n#include "exam.h"\n' +
-      'int main(void) { printf("%llu\\n", exam_lcm_u64(12, 18)); return 0; }\n');
+      'int main(void) { FILE *f = fopen("local-input.txt", "r");' +
+      ' if (!f) return 2; fclose(f);' +
+      ' printf("%llu\\n", exam_lcm_u64(12, 18)); return 0; }\n');
     const resolved = await app.resolve(source);
     assert.equal(await app.test(resolved), true);
     assert.ok(app.testedCode(source)?.includes("static unsigned long long exam_lcm_u64"));
@@ -86,6 +91,13 @@ test("standalone C and C++ judge share the same persisted official samples", asy
     ]);
     assert.equal(repeat.source, prepared.source);
     assert.equal(concurrent.source, prepared.source);
+    // A stale or outside-workspace source preference must not override
+    // the validated source association in the binding.
+    await app.state.rememberProblem(root, resolved.binding.bindingId, "offline",
+      { sourceFile: path.join(root, "unrelated.c") });
+    const candidates = await app.list(root);
+    assert.equal(candidates.find((x) => x.binding.bindingId ===
+      resolved.binding.bindingId)?.source, source);
 
     const cpp = path.join(folder, "main.cpp");
     await fs.writeFile(cpp,
