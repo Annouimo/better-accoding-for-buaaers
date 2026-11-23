@@ -125,17 +125,34 @@ class SessionOnlySecrets implements SecretStorage {
   async delete(key: string) { this.memory.delete(validKey(key)); }
 }
 
+/** A real session-only choice: cookies and passwords stay in memory for this process. */
 export function credentialsBackend(): {
   store: SecretStorage;
   persistent: boolean;
   description: string;
+  setSessionOnly(enabled: boolean): Promise<void>;
 } {
-  if (process.platform === "darwin")
-    return { store: new MacKeychain(), persistent: true, description: "macOS Keychain" };
-  if (process.platform === "win32")
-    return { store: new WindowsDpapi(), persistent: true, description: "Windows DPAPI" };
+  const persistent = process.platform === "darwin" || process.platform === "win32";
+  const backing: SecretStorage = process.platform === "darwin" ? new MacKeychain() :
+    process.platform === "win32" ? new WindowsDpapi() : new SessionOnlySecrets();
+  const temporary = new SessionOnlySecrets();
+  let sessionOnly = !persistent;
   return {
-    store: new SessionOnlySecrets(), persistent: false,
-    description: "session memory (no Linux keyring backend configured)"
+    store: {
+      get(key) { return (sessionOnly ? temporary : backing).get(key); },
+      store(key, value) { return (sessionOnly ? temporary : backing).store(key, value); },
+      delete(key) { return (sessionOnly ? temporary : backing).delete(key); }
+    },
+    persistent,
+    description: process.platform === "darwin" ? "macOS Keychain" :
+      process.platform === "win32" ? "Windows DPAPI" : "session memory",
+    async setSessionOnly(enabled: boolean) {
+      if (enabled && persistent) {
+        // Discard old persistent identity before using an ephemeral login.
+        await backing.delete("accoding.session");
+        await backing.delete("accoding.credentials");
+      }
+      sessionOnly = enabled || !persistent;
+    }
   };
 }
