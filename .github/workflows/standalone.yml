@@ -46,3 +46,29 @@ jobs:
         run: |
           bun build ./src/standalone/app.ts --compile --outfile /tmp/accoding
           /tmp/accoding --help
+
+  package-cross-platform:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci
+      - run: node scripts/embed-standalone-preset.mjs
+      - name: Compile and execute portable CLI
+        shell: bash
+        run: |
+          mkdir -p dist
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            bun build ./src/standalone/app.ts --compile --outfile ./dist/accoding.exe
+            ./dist/accoding.exe --help
+          else
+            bun build ./src/standalone/app.ts --compile --outfile ./dist/accoding
+            ./dist/accoding --help
+          fi
