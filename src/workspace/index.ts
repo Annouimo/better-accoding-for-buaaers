@@ -135,7 +135,7 @@ export async function writeWorkspaceIndex(root: string) {
   const friendly = await optional(await safePath(root,
     ".better-accoding/friendly-layout.json"));
   for (const file of files.sort()) {
-    if (!/^(problem-\d+|contest-\d+-\d+)\.json$/.test(file)) continue;
+    if (!/^((?:admin-)?problem-\d+|contest-\d+-\d+)\.json$/.test(file)) continue;
     const binding = bindingSchema.parse(
       await optional(await safePath(root, `.better-accoding/bindings/${file}`)),
     );
