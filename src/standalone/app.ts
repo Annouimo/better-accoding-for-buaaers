@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import fs from "node:fs/promises";
 import path from "node:path";
+import { configDirectory } from "./state";
 import { spawn } from "node:child_process";
 import { StandaloneWorkflow, type ResolvedProblem } from "./workflow";
 import { ask, confirm, interactive, select } from "./terminal";
@@ -29,6 +30,7 @@ function usage() {
     "  accoding status [--watch]        查询等待中的 OJ 评测",
     "  accoding sync                    手动同步题目与比赛",
     "  accoding config preset PATH      设置默认脚手架配置",
+    "  accoding config paths            查看本机数据存储位置",
     "  accoding config compiler c PATH  设置 C 编译器路径",
     "  accoding config compiler cpp PATH 设置 C++ 编译器路径",
     "",
@@ -198,6 +200,7 @@ async function tui(app: StandaloneWorkflow): Promise<void> {
         { label: "手动同步比赛与题目", value: "sync" },
         { label: "切换工作区目录", value: "workspace" },
         { label: "设置脚手架配置", value: "preset" },
+        { label: "查看本机数据存储位置", value: "paths" },
         { label: "设置 C / C++ 编译器", value: "compiler" },
         { label: "查看待查询的 OJ 提交", value: "status" },
         { label: "切换 C / C++", value: "language" },
@@ -236,9 +239,13 @@ async function tui(app: StandaloneWorkflow): Promise<void> {
         }
       } else if (extra === "preset") {
         const state = await app.state.load();
+        console.log("将 c-exam-kit 的配置文件夹拖入终端，或粘贴 manifest.json 的路径。");
         console.log("当前配置：" + (state.presetPath || "内置示例"));
-        const entry = await ask("输入配置 manifest.json 路径，或输入 default 恢复内置配置", "default");
+        const entry = await ask("脚手架目录或 manifest.json（default 恢复内置）",
+          state.presetPath || "default");
         await app.setPreset(entry === "default" ? undefined : entry);
+      } else if (extra === "paths") {
+        await showPaths(app);
       }
       else if (extra === "status") await app.status(undefined, true);
       else if (extra === "language" && current) current = await app.selectSource(current);
@@ -250,6 +257,20 @@ async function tui(app: StandaloneWorkflow): Promise<void> {
       console.error("操作失败：" + (error instanceof Error ? error.message : String(error)));
     }
   }
+}
+
+async function showPaths(app: StandaloneWorkflow): Promise<void> {
+  const state = await app.state.load();
+  console.log("普通设置：" + path.join(configDirectory(), "state.json"));
+  console.log("登录凭据：" + app.credentialBackend.description +
+    "（Cookie 与记住的密码不放入工作区）");
+  console.log("当前工作区：" + (state.lastWorkspace || "尚未选择"));
+  if (state.lastWorkspace) {
+    console.log("题目元数据：" + path.join(state.lastWorkspace, ".better-accoding"));
+    console.log("提交状态：" + path.join(state.lastWorkspace, ".accoding", "submissions"));
+    console.log("脚手架快照：各题目录内的 .accoding/scaffold/");
+  }
+  console.log("当前默认脚手架：" + (state.presetPath || "内置示例"));
 }
 
 async function run(): Promise<void> {
@@ -286,6 +307,10 @@ async function run(): Promise<void> {
       return;
     }
     if (command === "sync") { await app.sync(root); return; }
+    if (command === "config" && args[1] === "paths") {
+      await showPaths(app);
+      return;
+    }
     if (command === "config" && args[1] === "preset" && args[2]) {
       await app.setPreset(args[2] === "default" ? undefined : args[2]);
       return;
