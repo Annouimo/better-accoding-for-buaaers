@@ -4,6 +4,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { WorkspaceStore } from "../../src/workspace/store";
+import { StandaloneWorkflow } from "../../src/standalone/workflow";
 import type { Problem } from "../../src/model";
 import { StateStore, activityAccepted } from "../../src/standalone/state";
 import { droppedPath, readableName, initializeFriendlyLayout,
@@ -41,6 +42,16 @@ test("new friendly workspace works and legacy sources are preserved", async () =
     assert.equal(await fs.readFile(path.join(root, friendly, "main.c"), "utf8").then(Boolean), true);
     assert.equal(await fs.stat(path.join(root, friendly, "tests", "tests.json")).then(x => x.isFile()), true);
     assert.equal((await store.list())[0].problemDirectory, friendly);
+    const app = new StandaloneWorkflow();
+    try {
+      assert.equal((await app.resolve(path.join(root, friendly, "main.c")))
+        .binding.bindingId, entry.bindingId);
+      const unrelated = path.join(root, friendly, "unrelated.c");
+      await fs.writeFile(unrelated, "int main(void){return 0;}\n");
+      await assert.rejects(app.resolve(unrelated), /当前文件不属于已初始化的题目/);
+    } finally {
+      app.dispose();
+    }
     const another = await readableProblemDirectory(root, problem);
     assert.match(another, /987654$/);
     assert.equal(await initializeFriendlyLayout(root), true);
