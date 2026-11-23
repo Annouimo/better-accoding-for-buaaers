@@ -120,8 +120,9 @@ export class StandaloneWorkflow {
     const pass = await password("Accoding 密码");
     if (!pass) throw new Error("密码不能为空。");
     const remember = this.credentialBackend.persistent
-      ? await confirm("在系统安全凭据存储中记住密码，以便自动登录？", true)
+      ? await confirm("保持登录并将凭据保存在系统安全存储中？选择“否”仅本次运行有效", true)
       : false;
+    await this.credentialBackend.setSessionOnly(!remember);
     const user = await this.session.signIn({ username, password: pass }, remember);
     this.restored = true;
     const state = await this.state.load();
