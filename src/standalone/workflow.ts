@@ -167,6 +167,20 @@ export class StandaloneWorkflow {
         "#include <iostream>\n\nint main() {\n    return 0;\n}\n", "utf8");
   }
 
+  async activePreset(explicit?: string): Promise<LoadedPreset> {
+    const file = explicit || (await this.state.load()).presetPath;
+    return file ? loadPreset(file) : builtinPreset();
+  }
+
+  async setPreset(file?: string): Promise<void> {
+    if (file) {
+      const preset = await loadPreset(file);
+      console.log("脚手架配置：" + preset.manifest.id +
+        "，共 " + preset.manifest.components.length + " 个组件。");
+    }
+    await this.state.rememberPreset(file);
+  }
+
   async importContest(value: string, rootArg?: string, presetPath?: string): Promise<void> {
     const account = await this.account();
     if (!account) throw new Error("未登录");
@@ -176,7 +190,7 @@ export class StandaloneWorkflow {
     const snapshot = await fetchContestSnapshotForImport(this.session.client, input.id,
       (line) => console.log(line));
     const workspace = new WorkspaceStore(root);
-    const preset = presetPath ? await loadPreset(presetPath) : builtinPreset();
+    const preset = await this.activePreset(presetPath);
     const imported = await syncContest(workspace, snapshot);
     for (const binding of imported) await this.ensureScaffold(root, binding, preset);
     if (imported.length) {
@@ -238,8 +252,7 @@ export class StandaloneWorkflow {
     }
     const workspace = new WorkspaceStore(root);
     const binding = await workspace.import(problem);
-    await this.ensureScaffold(root, binding,
-      presetPath ? await loadPreset(presetPath) : builtinPreset());
+    await this.ensureScaffold(root, binding, await this.activePreset(presetPath));
     await this.state.rememberProblem(root, binding.bindingId, account);
     console.log("已导入：" + binding.problem.title);
     console.log("目录：" + path.dirname(sourceFor(binding, root)));
@@ -257,7 +270,7 @@ export class StandaloneWorkflow {
       const bindings = await syncContest(workspace, snapshot);
       for (const binding of bindings) {
         if (!binding.unavailable)
-          await this.ensureScaffold(root, binding, builtinPreset());
+          await this.ensureScaffold(root, binding, await this.activePreset());
       }
       console.log("比赛 " + id + " 已同步。");
     }
