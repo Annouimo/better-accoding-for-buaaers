@@ -63,15 +63,15 @@ test("standalone C and C++ judge share the same persisted official samples", asy
       'int main(void) { printf("%llu\\n", exam_lcm_u64(12, 18)); return 0; }\n');
     const resolved = await app.resolve(source);
     assert.equal(await app.test(resolved), true);
-    assert.equal(app.testedCode(source)).toContain("static unsigned long long exam_lcm_u64");
+    assert.ok(app.testedCode(source)?.includes("static unsigned long long exam_lcm_u64"));
     const prepared = await app.prepare(resolved);
-    expect(prepared.code).not.toContain('#include "exam.h"');
+    assert.ok(!prepared.code.includes('#include "exam.h"'));
 
     const cpp = path.join(folder, "main.cpp");
     await fs.writeFile(cpp,
       '#include <iostream>\nint main() { std::cout << 36 << "\\n"; }\n');
     const cppResolved = await app.resolve(cpp);
-    expect(await app.test(cppResolved), true);
+    assert.equal(await app.test(cppResolved), true);
     assert.ok(!(await app.prepare(cppResolved)).code.includes("exam_lcm_u64"));
   } finally {
     app.dispose();
