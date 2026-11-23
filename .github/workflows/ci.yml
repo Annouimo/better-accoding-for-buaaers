@@ -1,5 +1,13 @@
 name: CI
-on: [push, pull_request, workflow_dispatch]
+# Run the full extension matrix only for main or explicit manual verification.
+# A development-branch push must not enqueue six additional jobs.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
