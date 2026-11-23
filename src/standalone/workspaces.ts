@@ -66,10 +66,17 @@ export async function isFriendlyWorkspace(root: string): Promise<boolean> {
 /** Legacy workspaces keep the numeric layout; only fresh standalone ones get readable names. */
 export async function initializeFriendlyLayout(root: string): Promise<boolean> {
   if (await isFriendlyWorkspace(root)) return true;
-  if (await exists(path.join(root, ".better-accoding", "workspace.json")) ||
-      await exists(path.join(root, "contests")) ||
+  if (await exists(path.join(root, "contests")) ||
       await exists(path.join(root, "problems")))
     return false;
+  const index = path.join(root, ".better-accoding", "workspace.json");
+  if (await exists(index)) {
+    const previous = JSON.parse(await fs.readFile(index, "utf8")) as {
+      bindings?: unknown[]
+    };
+    if (!Array.isArray(previous.bindings) || previous.bindings.length > 0)
+      return false;
+  }
   const folder = path.join(root, ".better-accoding");
   await fs.mkdir(folder, { recursive: true });
   try {
