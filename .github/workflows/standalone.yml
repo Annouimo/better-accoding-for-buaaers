@@ -28,7 +28,7 @@ jobs:
       - name: Embedded preset generation
         run: node scripts/embed-standalone-preset.mjs
       - name: Scaffold unit tests
-        run: bun test tests/standalone/scaffold.test.mjs
+        run: bun test tests/standalone
       - name: Standalone help
         run: bun src/standalone/app.ts --help
       - name: Minimal C99 scaffold smoke
