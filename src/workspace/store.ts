@@ -47,7 +47,7 @@ export class WorkspaceStore {
   private observed = new Map<string, { revision: number; hash: string }>();
   constructor(readonly root: string) {}
   private file(id: string) {
-    if (!/^(problem-\d+|contest-\d+-\d+)$/.test(id))
+    if (!/^((?:admin-)?problem-\d+|contest-\d+-\d+)$/.test(id))
       throw new Error("无效题目绑定。");
     return safePath(this.root, `.better-accoding/bindings/${id}.json`);
   }
@@ -77,7 +77,7 @@ export class WorkspaceStore {
           for (const file of await fs.readdir(
             await safePath(this.root, relative),
           ))
-            if (/^(problem-\d+|contest-\d+-\d+)\.json$/.test(file))
+            if (/^((?:admin-)?problem-\d+|contest-\d+-\d+)\.json$/.test(file))
               ids.add(file.slice(0, -5));
         } catch (e) {
           if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
