@@ -181,6 +181,7 @@ async function tui(app: StandaloneWorkflow): Promise<void> {
     }
     if (action === "more") {
       const extra = await select("更多操作", [
+        { label: "直接提交当前题目（跳过本地测试）", value: "submit" },
         { label: "开始新比赛", value: "contest" },
         { label: "导入单题", value: "problem" },
         { label: "查看已 AC 题目", value: "accepted" },
@@ -194,7 +195,10 @@ async function tui(app: StandaloneWorkflow): Promise<void> {
         { label: "登录 / 切换账号", value: "login" },
         { label: "退出登录", value: "logout" }
       ]);
-      if (extra === "contest") {
+      if (extra === "submit" && current) {
+        if (await confirm("确认跳过样例检查，直接编译并提交当前源文件？"))
+          await app.submit(current);
+      } else if (extra === "contest") {
         const id = await ask("比赛 ID 或链接");
         if (id) { await app.importContest(id); current = undefined; }
       } else if (extra === "problem") {
