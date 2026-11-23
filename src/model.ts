@@ -73,6 +73,8 @@ export interface Binding {
   bindingId: string;
   problem: Problem;
   sourceFile: string;
+  /** Optional stable, user-friendly directory for standalone workspaces. */
+  problemDirectory?: string;
   selectedSubmissionLanguage?: string;
   fetchedAt: string;
   revision: number;
