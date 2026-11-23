@@ -60,6 +60,30 @@ Run \`accoding config paths\` to display local paths. On macOS, normal state is 
 
 A macOS Keychain adapter still uses the \`security\` executable with short-lived encoded credential arguments; replacing it with a native binding remains a hardening task before final release.
 
+## Single-file lightweight preview (requires Bun)
+
+For development and frequent Mac/Windows tests, build a **single JavaScript file without embedding the Bun runtime**:
+
+~~~sh
+npm ci
+npm run build:standalone:light
+npm run check:standalone:light
+~~~
+
+The output is `dist/accoding.mjs`. Copy this file anywhere; its npm dependencies are bundled. Launch with an already installed Bun runtime:
+
+~~~sh
+bun /path/to/accoding.mjs
+bun /path/to/accoding.mjs --help
+bun /path/to/accoding.mjs config paths
+~~~
+
+The build checks the file from a temporary empty directory without access to the repository's `node_modules`. The verified November 2026 preview was approximately **2.0 MiB**, compared with the much larger runtime-containing macOS build.
+
+The lightweight file and the compiled version share their CLI/TUI code and state directory. The user's `c-exam-kit` preset is imported from its own local directory; it need not be bundled into this file. The Bun runtime is not included, so distribution to students without Bun should use a future compiled release instead.
+
+**Development boundary:** P0 implementation and offline tests have been checked, but real Accoding login, live submission, and the Windows/Dev-C++ end-to-end experience still require user acceptance. The separate one-off preview build is not an automatic development CI trigger.
+
 ## Safety and limitations
 
 The local judge executes user source with the user's permissions; it is not a sandbox. The tool is not authorized by default for coursework examinations, even if reference material is allowed. No AI is used at runtime. Credentials must not be committed. macOS Keychain CLI currently passes the encrypted-store value through short-lived process arguments; a future native adapter could improve this.
