@@ -13,6 +13,8 @@ export interface ApplicationState {
   lastProblem?: string;
   lastAccount?: string;
   presetPath?: string;
+  compilerC?: string;
+  compilerCpp?: string;
   problems: Record<string, ProblemActivity>;
 }
 
@@ -59,6 +61,13 @@ export class StateStore {
     } finally {
       await fs.rm(temp, { force: true });
     }
+  }
+
+  async rememberCompiler(language: "c" | "cpp", executable: string): Promise<void> {
+    const state = await this.load();
+    if (language === "c") state.compilerC = executable || undefined;
+    else state.compilerCpp = executable || undefined;
+    await this.save(state);
   }
 
   async rememberPreset(file?: string): Promise<void> {
