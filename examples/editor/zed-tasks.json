@@ -1,0 +1,22 @@
+[
+  {
+    "label": "Accoding: Test",
+    "command": "accoding",
+    "args": [
+      "test",
+      "$ZED_FILE"
+    ],
+    "save": "current",
+    "reveal": "always"
+  },
+  {
+    "label": "Accoding: Submit",
+    "command": "accoding",
+    "args": [
+      "submit",
+      "$ZED_FILE"
+    ],
+    "save": "current",
+    "reveal": "always"
+  }
+]

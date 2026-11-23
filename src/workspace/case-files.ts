@@ -6,6 +6,7 @@ import { renderStatement } from "../problems/statement";
 import { atomicWrite, safePath, ConflictError } from "./fs";
 
 export function problemDirectory(binding: Binding) {
+  if (binding.problemDirectory) return binding.problemDirectory;
   const target = binding.problem.target;
   return target.kind === "problemset"
     ? `problems/${target.problemId}`

@@ -52,7 +52,12 @@
     "package": "node scripts/package.mjs",
     "format:check": "prettier --check src webview tests scripts",
     "test:package": "node scripts/test-package.mjs",
-    "test:debug": "node scripts/test-debug.mjs"
+    "test:debug": "node scripts/test-debug.mjs",
+    "test:standalone": "bun test tests/standalone",
+    "build:standalone": "node scripts/embed-standalone-preset.mjs && bun build ./src/standalone/app.ts --compile --outfile dist/accoding",
+    "start:standalone": "bun src/standalone/app.ts",
+    "build:standalone:light": "node scripts/embed-standalone-preset.mjs && bun build ./src/standalone/app.ts --target=bun --outfile dist/accoding.mjs",
+    "check:standalone:light": "node scripts/check-standalone-light.mjs"
   },
   "contributes": {
     "commands": [

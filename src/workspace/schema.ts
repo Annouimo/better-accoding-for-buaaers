@@ -22,9 +22,10 @@ export const problemSchema = z.object({
 export const bindingSchema = z.object({
   schemaVersion: z.literal(2),
   comparisonDefaultsVersion: z.literal(1).optional(),
-  bindingId: z.string().regex(/^(problem-\d+|contest-\d+-\d+)$/),
+  bindingId: z.string().regex(/^((?:admin-)?problem-\d+|contest-\d+-\d+)$/),
   problem: problemSchema,
   sourceFile: z.string(),
+  problemDirectory: z.string().optional(),
   selectedSubmissionLanguage: z.string().optional(),
   fetchedAt: z.string(),
   revision: z.number().int().nonnegative(),

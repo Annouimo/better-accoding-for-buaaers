@@ -1,0 +1,161 @@
+name: Standalone CLI checks
+
+# Opt-in only. Routine development checks run locally.
+on:
+  workflow_dispatch:
+    inputs:
+      package_release:
+        description: "Also build Windows and macOS preview packages"
+        required: false
+        type: boolean
+        default: false
+concurrency:
+  group: standalone-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  standalone:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci
+      - name: TypeScript
+        run: npm run typecheck
+      - name: Embedded preset generation
+        run: node scripts/embed-standalone-preset.mjs
+      - name: Scaffold unit tests
+        run: bun test tests/standalone
+      - name: Check out independent c-exam-kit IO preset
+        uses: actions/checkout@v4
+        with:
+          repository: Annouimo/c-exam-kit
+          ref: feat/lightweight-io-standalone-preset
+          path: exam-kit
+      - name: Integrate actual exam-kit Manifest v1, macros and dependency expansion
+        shell: bash
+        run: |
+          set -euo pipefail
+          PRESET="$GITHUB_WORKSPACE/exam-kit/scaffold/presets/exam-io-c99"
+          bun src/standalone/cli.ts scaffold init /tmp/exam-io-standalone --preset "$PRESET"
+          cat > /tmp/exam-io-standalone/main.c <<'EOF'
+          #include "exam.h"
+          int main(void) {
+              int n = read_int();
+              int a[4];
+              read_ints(a, n);
+              print_ints(a, n, " ", "\n");
+              return 0;
+          }
+          EOF
+          bun src/standalone/cli.ts scaffold prepare /tmp/exam-io-standalone/main.c
+          grep -q 'read_ints_into' /tmp/exam-io-standalone/.accoding/submit.c
+          ! grep -q 'read_doubles_into' /tmp/exam-io-standalone/.accoding/submit.c
+          cc -std=c99 /tmp/exam-io-standalone/.accoding/submit.c -lm -o /tmp/accoding-exam-io
+          test "$(printf '3 10 20 30\n' | /tmp/accoding-exam-io)" = "10 20 30"
+      - name: Standalone help
+        run: bun src/standalone/app.ts --help
+      - name: Minimal C99 scaffold smoke
+        run: |
+          bun src/standalone/cli.ts scaffold init /tmp/accoding-demo
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("/tmp/accoding-demo/main.c")
+          p.write_text('#include <stdio.h>\n#include "exam.h"\nint main(void) { printf("%llu\\n", exam_lcm_u64(12, 18)); return 0; }\n')
+          PY
+          bun src/standalone/cli.ts scaffold prepare /tmp/accoding-demo/main.c
+          gcc -std=c99 /tmp/accoding-demo/.accoding/submit.c -o /tmp/accoding-hello
+          test "$(/tmp/accoding-hello)" = "36"
+      - name: Build self-contained binary
+        run: |
+          bun build ./src/standalone/app.ts --compile --outfile /tmp/accoding
+          /tmp/accoding --help
+
+  package-cross-platform:
+    if: inputs.package_release == true
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci
+      - run: node scripts/embed-standalone-preset.mjs
+      - name: Compile and execute portable CLI
+        shell: bash
+        run: |
+          mkdir -p dist
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            bun build ./src/standalone/app.ts --compile --outfile ./dist/accoding.exe
+            ./dist/accoding.exe --help
+          else
+            bun build ./src/standalone/app.ts --compile --outfile ./dist/accoding
+            ./dist/accoding --help
+          fi
+
+  macos-arm64-preview:
+    if: inputs.package_release == true
+    name: Build downloadable macOS Apple Silicon preview
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci
+      - name: Check TypeScript
+        run: npm run typecheck
+      - name: Embed current scaffold preset
+        run: node scripts/embed-standalone-preset.mjs
+      - name: Run standalone tests on Apple Silicon
+        run: bun test tests/standalone
+      - name: Build, sign, and smoke-test binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          uname -m
+          test "$(uname -m)" = "arm64"
+          mkdir -p dist
+          bun build ./src/standalone/app.ts --compile --target=bun-darwin-arm64 --outfile ./dist/accoding
+          chmod +x ./dist/accoding
+          codesign --force --sign - --timestamp=none ./dist/accoding
+          file ./dist/accoding
+          ./dist/accoding --help
+          cat > ./dist/README-START-HERE.txt <<'EOF'
+          Accoding TUI development preview for macOS Apple Silicon (M1/M2/M3/M4/M5).
+          This is a development test build; real OJ login/submission is not fully verified.
+
+          Open Terminal in this folder:
+              chmod +x ./accoding
+              ./accoding
+
+          For CLI usage:
+              ./accoding --help
+
+          If macOS blocks opening this unsigned development build:
+              xattr -d com.apple.quarantine ./accoding
+          Only do so if you trust this build. There is no Apple notarization.
+
+          Local C/C++ tests require Apple command line tools (xcode-select --install)
+          or another configured C/C++ compiler. The program includes the Bun runtime.
+          EOF
+          (cd dist && zip -9 accoding-macos-arm64-preview.zip accoding README-START-HERE.txt)
+          (cd dist && shasum -a 256 accoding-macos-arm64-preview.zip > accoding-macos-arm64-preview.zip.sha256)
+      - name: Upload Mac test binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: accoding-macos-arm64-preview
+          path: |
+            dist/accoding-macos-arm64-preview.zip
+            dist/accoding-macos-arm64-preview.zip.sha256
+          if-no-files-found: error
+          retention-days: 30
