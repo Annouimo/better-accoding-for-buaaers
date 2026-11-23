@@ -26,7 +26,7 @@ function usage() {
     "  accoding test PATH               测试当前 C/C++ 源文件",
     "  accoding submit PATH             提交源文件",
     "  accoding file PATH               当前文件的简洁操作菜单",
-    "  accoding status                  查询等待中的 OJ 评测",
+    "  accoding status [--watch]        查询等待中的 OJ 评测"
     "  accoding sync                    手动同步题目与比赛",
     "",
     "  --root DIR                       指定工作区（初始化/同步/查询）",
@@ -198,7 +198,7 @@ async function tui(app: StandaloneWorkflow): Promise<void> {
         const picked = await chooseProblem(app, true);
         if (picked) await fileMenu(app, picked);
       } else if (extra === "sync") await app.sync();
-      else if (extra === "status") await app.status();
+      else if (extra === "status") await app.status(undefined, true);
       else if (extra === "language" && current) current = await app.selectSource(current);
       else if (extra === "folder" && current) await openFolder(current.source);
       else if (extra === "login") await app.login();
@@ -241,7 +241,7 @@ async function run(): Promise<void> {
       return;
     }
     if (command === "sync") { await app.sync(root); return; }
-    if (command === "status") { await app.status(root); return; }
+    if (command === "status") { await app.status(root, args.includes("--watch")); return; }
     usage();
     throw new Error("不支持的命令。");
   } finally {
