@@ -70,13 +70,32 @@ test("standalone C and C++ judge share the same persisted official samples", asy
     assert.ok(app.testedCode(source)?.includes("static unsigned long long exam_lcm_u64"));
     const prepared = await app.prepare(resolved);
     assert.ok(!prepared.code.includes('#include "exam.h"'));
+    assert.notEqual(prepared.source, source);
+    const firstBytes = await fs.readFile(prepared.source, "utf8");
+    const originalBytes = await fs.readFile(source, "utf8");
+    assert.equal(prepared.originalHash.length, 64);
+    // A second editor task must not overwrite a snapshot used by the first one.
+    await fs.writeFile(source, originalBytes.replace("12, 18", "15, 20"));
+    const changed = await app.prepare(resolved);
+    assert.notEqual(changed.source, prepared.source);
+    assert.notEqual(changed.originalHash, prepared.originalHash);
+    assert.equal(await fs.readFile(prepared.source, "utf8"), firstBytes);
+    await fs.writeFile(source, originalBytes);
+    const [repeat, concurrent] = await Promise.all([
+      app.prepare(resolved), app.prepare(resolved)
+    ]);
+    assert.equal(repeat.source, prepared.source);
+    assert.equal(concurrent.source, prepared.source);
 
     const cpp = path.join(folder, "main.cpp");
     await fs.writeFile(cpp,
       '#include <iostream>\nint main() { std::cout << 36 << "\\n"; }\n');
     const cppResolved = await app.resolve(cpp);
     assert.equal(await app.test(cppResolved), true);
-    assert.ok(!(await app.prepare(cppResolved)).code.includes("exam_lcm_u64"));
+    const cppSnapshot = await app.prepare(cppResolved);
+    assert.ok(!cppSnapshot.code.includes("exam_lcm_u64"));
+    assert.notEqual(cppSnapshot.source, cpp);
+    assert.equal(await fs.readFile(cppSnapshot.source, "utf8"), cppSnapshot.code);
   } finally {
     app.dispose();
     if (savedConfig === undefined) delete process.env.XDG_CONFIG_HOME;
