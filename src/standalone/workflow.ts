@@ -633,6 +633,10 @@ export class StandaloneWorkflow {
       problem.binding.bindingId, problem.binding.revision,
       (b) => { b.sourceFile = result; delete b.selectedSubmissionLanguage; }
     );
+    const account = this.session.user?.id ??
+      (await this.state.load()).lastAccount ?? "offline";
+    await this.state.rememberProblem(problem.root, binding.bindingId, account,
+      { sourceFile: source });
     return { ...problem, binding, source };
   }
 
