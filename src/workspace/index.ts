@@ -132,6 +132,8 @@ export async function writeWorkspaceIndex(root: string) {
     if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
   }
   const bindings: Binding[] = [];
+  const friendly = await optional(await safePath(root,
+    ".better-accoding/friendly-layout.json"));
   for (const file of files.sort()) {
     if (!/^(problem-\d+|contest-\d+-\d+)\.json$/.test(file)) continue;
     const binding = bindingSchema.parse(
@@ -163,7 +165,9 @@ export async function writeWorkspaceIndex(root: string) {
               : [],
           ),
         ),
-      ].map((id) => ({ id, metadataFile: `contests/${id}/contest.json` })),
+      ].map((id) => ({ id, metadataFile: friendly?.version === 1
+        ? `.better-accoding/rosters/${id}.json`
+        : `contests/${id}/contest.json` })),
     },
     null,
     2,
