@@ -1,4 +1,5 @@
-import { test, expect } from "bun:test";
+import { test } from "node:test";
+import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -16,12 +17,10 @@ test("state persists verdict per account and source path", async () => {
       verdict: "AC", sourceFile: path.join(root, "main.c")
     });
     const loaded = await state.load();
-    expect(isAccepted(state.getActivity(loaded, root, "contest-123-1", "account-1").verdict))
-      .toBe(true);
-    expect(isAccepted(state.getActivity(loaded, root, "contest-123-1", "account-2").verdict))
-      .toBe(false);
-    expect(state.isLastProblem(loaded, root, "contest-123-1", "account-1")).toBe(true);
-    expect(state.isLastProblem(loaded, root, "contest-123-2", "account-1")).toBe(false);
+    assert.equal(isAccepted(state.getActivity(loaded, root, "contest-123-1", "account-1").verdict), true);
+    assert.equal(isAccepted(state.getActivity(loaded, root, "contest-123-1", "account-2").verdict), false);
+    assert.equal(state.isLastProblem(loaded, root, "contest-123-1", "account-1"), true);
+    assert.equal(state.isLastProblem(loaded, root, "contest-123-2", "account-1"), false);
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }
@@ -63,8 +62,8 @@ test("standalone C and C++ judge share the same persisted official samples", asy
       '#include <stdio.h>\n#include "exam.h"\n' +
       'int main(void) { printf("%llu\\n", exam_lcm_u64(12, 18)); return 0; }\n');
     const resolved = await app.resolve(source);
-    expect(await app.test(resolved)).toBe(true);
-    expect(app.testedCode(source)).toContain("static unsigned long long exam_lcm_u64");
+    assert.equal(await app.test(resolved), true);
+    assert.equal(app.testedCode(source)).toContain("static unsigned long long exam_lcm_u64");
     const prepared = await app.prepare(resolved);
     expect(prepared.code).not.toContain('#include "exam.h"');
 
@@ -72,8 +71,8 @@ test("standalone C and C++ judge share the same persisted official samples", asy
     await fs.writeFile(cpp,
       '#include <iostream>\nint main() { std::cout << 36 << "\\n"; }\n');
     const cppResolved = await app.resolve(cpp);
-    expect(await app.test(cppResolved)).toBe(true);
-    expect((await app.prepare(cppResolved)).code).not.toContain("exam_lcm_u64");
+    expect(await app.test(cppResolved), true);
+    assert.ok(!(await app.prepare(cppResolved)).code.includes("exam_lcm_u64"));
   } finally {
     app.dispose();
     if (savedConfig === undefined) delete process.env.XDG_CONFIG_HOME;
